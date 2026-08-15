@@ -1,0 +1,4 @@
+-- Anciennement des données de démonstration (avions/vols/PIREPs d'exemple) pour les premières
+-- phases de développement. Retirées pour livrer une base vierge aux nouvelles installations —
+-- gardé comme fichier de migration vide (plutôt que supprimé) pour ne pas décaler la numérotation
+-- des migrations suivantes déjà appliquées sur des installations existantes.

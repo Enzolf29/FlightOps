@@ -1,0 +1,19 @@
+appId: com.flightops.app
+productName: FlightOps
+directories:
+  buildResources: resources
+  output: dist
+files:
+  - out/**/*
+  - package.json
+asarUnpack:
+  - '**/*.node'
+  - '**/node_modules/regedit/**'
+npmRebuild: false
+win:
+  target: nsis
+  icon: resources/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+out/
+*.log
+.DS_Store
+
+# Runtime SQLite data and ad-hoc DB corruption-recovery artifacts (not source, may contain real pilot/flight data)
+db-backup-*/
+db-recovery/
+*.db
+*.db-shm
+*.db-wal
