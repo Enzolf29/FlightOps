@@ -6,11 +6,15 @@ import { CABIN_ANNOUNCEMENT_TYPES, isCabinAnnouncementType } from '@shared/types
 import type {
   TabletCabinCommand,
   TabletCabinStatus,
+  TabletCalendarFlight,
+  TabletOfpSummary,
   TabletServerInfo,
   TabletSnapshot
 } from '@shared/types/tablet'
 import type { SimTelemetry } from '@shared/types/simconnect'
-import { getAllFlights, getFlightWithRelationsById } from '../db/repositories/flightRepository'
+import { buildLoadsheetComparison } from '@shared/simbrief/buildLoadsheetComparison'
+import { parseOfpDetail, type OfpDetail } from '@shared/simbrief/parseOfpDetail'
+import { getAllFlights, getFlightOfpJson, getFlightWithRelationsById } from '../db/repositories/flightRepository'
 import { getStatus, onStatusChange, onTelemetry } from '../simconnect/connectionManager'
 import { requestMetar } from '../simconnect/metarClient'
 import {
@@ -22,6 +26,7 @@ import {
   onFlightEvent
 } from '../simconnect/flightStatusDetector'
 import { TABLET_PAGE_HTML } from './tabletPage'
+import { TABLET_APP_ICON_SVG, TABLET_MANIFEST, TABLET_SERVICE_WORKER } from './tabletPwa'
 
 const PREFERRED_PORT = 8732
 const MAX_BODY_BYTES = 16_384
@@ -42,8 +47,12 @@ let cabinStatus: TabletCabinStatus = {
   activeVoice: null,
   activeMusic: null,
   queuedTypes: [],
-  availableTypes: []
+  availableTypes: [],
+  boardingCompleted: false,
+  finalLoadsheet: null
 }
+
+const ofpCache = new Map<number, { raw: string | null; detail: OfpDetail | null }>()
 
 const streamClients = new Set<ServerResponse>()
 const cabinCommandListeners = new Set<CabinCommandListener>()
@@ -78,11 +87,52 @@ function downsamplePath<T>(points: T[]): T[] {
   return sampled
 }
 
+function getOfpDetail(flightId: number): OfpDetail | null {
+  const raw = getFlightOfpJson(flightId)
+  const cached = ofpCache.get(flightId)
+  if (cached?.raw === raw) return cached.detail
+  const detail = raw ? parseOfpDetail(raw) : null
+  ofpCache.set(flightId, { raw, detail })
+  return detail
+}
+
+function toTabletOfp(detail: OfpDetail | null, includeRoutePath = true): TabletOfpSummary | null {
+  if (!detail) return null
+  return {
+    route: detail.route,
+    sidIdent: detail.sidIdent,
+    starIdent: detail.starIdent,
+    departureRunway: detail.origin?.planRunway ?? null,
+    arrivalRunway: detail.destination?.planRunway ?? null,
+    cruiseAltitudeFeet: detail.cruiseAltitudeFeet,
+    costIndex: detail.costIndex,
+    distanceNm: detail.routeDistanceNm,
+    isaDeviationCelsius: detail.isaDeviationCelsius,
+    climbAvgWind: detail.climbAvgWind,
+    cruiseAvgWind: detail.cruiseAvgWind,
+    descentAvgWind: detail.descentAvgWind,
+    routePath: includeRoutePath ? detail.navlog.map((fix) => ({ lat: fix.lat, lon: fix.lon })) : [],
+    alternateIcao: detail.alternate?.icaoCode ?? null,
+    alternateRoute: detail.alternateRoute,
+    alternateCruiseAltitudeFeet: detail.alternateCruiseAltitudeFeet,
+    alternateDistanceNm: detail.alternateDistanceNm,
+    alternateEteMinutes: detail.alternateEteMinutes
+  }
+}
+
 function buildSnapshot(): TabletSnapshot {
   const armedFlightId = getArmedFlightId()
-  const availableFlights = getAllFlights().filter(
+  const allFlights = getAllFlights()
+  const availableFlights = allFlights.filter(
     (flight) => flight.status === 'upcoming' || flight.status === 'in_progress'
   )
+  const calendarFlights: TabletCalendarFlight[] = availableFlights.map((flight) => ({
+    flight,
+    // Le calendrier n'a besoin que du briefing texte : les centaines de points navlog ne doivent
+    // pas être renvoyées chaque seconde pour chaque futur vol.
+    briefing: toTabletOfp(getOfpDetail(flight.id), false)
+  }))
+  const activeDetail = armedFlightId === null ? null : getOfpDetail(armedFlightId)
   const telemetry = latestTelemetry
     ? (({ diagnostics: _diagnostics, ...safeTelemetry }) => safeTelemetry)(latestTelemetry)
     : null
@@ -93,10 +143,17 @@ function buildSnapshot(): TabletSnapshot {
     armedFlightId,
     flight: armedFlightId === null ? null : getFlightWithRelationsById(armedFlightId),
     availableFlights,
+    calendarFlights,
     telemetry,
     events: getFlightEvents().filter((event) => event.type !== 'operational_alert'),
     path: downsamplePath(getLiveFlightPath()),
-    cabin: cabinStatus
+    cabin: cabinStatus,
+    ofp: toTabletOfp(activeDetail),
+    loadsheet: activeDetail?.loadsheet ? {
+      isFinal: cabinStatus.finalLoadsheet !== null,
+      capturedAt: cabinStatus.finalLoadsheet?.capturedAt ?? null,
+      rows: buildLoadsheetComparison(activeDetail.loadsheet, cabinStatus.finalLoadsheet)
+    } : null
   }
 }
 
@@ -159,6 +216,24 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
       'content-security-policy': "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
     })
     response.end(TABLET_PAGE_HTML)
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/manifest.webmanifest') {
+    response.writeHead(200, { 'content-type': 'application/manifest+json; charset=utf-8', 'cache-control': 'no-cache' })
+    response.end(TABLET_MANIFEST)
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/app-icon.svg') {
+    response.writeHead(200, { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'public, max-age=86400' })
+    response.end(TABLET_APP_ICON_SVG)
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/sw.js') {
+    response.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-cache', 'service-worker-allowed': '/' })
+    response.end(TABLET_SERVICE_WORKER)
     return
   }
 

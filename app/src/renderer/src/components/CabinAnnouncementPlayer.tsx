@@ -276,7 +276,9 @@ export function CabinAnnouncementPlayer() {
         activeVoice: state.activeVoice,
         activeMusic: state.activeMusic,
         queuedTypes: state.queuedTypes,
-        availableTypes: files.map((file) => file.type)
+        availableTypes: files.map((file) => file.type),
+        boardingCompleted: state.boardingCompleted,
+        finalLoadsheet: state.finalLoadsheet
       })
     }
     publishToTablet()

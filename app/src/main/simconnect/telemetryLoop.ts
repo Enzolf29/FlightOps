@@ -78,6 +78,8 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_BOARDING_CARGO_PERCENT', 'percent', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_VAR_Frozen', 'bool', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'TIME OF DAY', 'enum', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'AMBIENT TEMPERATURE', 'celsius', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'TOTAL AIR TEMPERATURE', 'celsius', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'AIRSPEED INDICATED', 'knots', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'GROUND VELOCITY', 'knots', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'VERTICAL SPEED', 'feet per minute', SimConnectDataType.FLOAT64)
@@ -152,6 +154,8 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
     const gsxCargoBoardingPercent = data.readFloat64()
     const gsxPushbackFrozen = data.readFloat64() >= 0.5
     const timeOfDay = Math.round(data.readFloat64())
+    const outsideAirTemperatureCelsius = data.readFloat64()
+    const totalAirTemperatureCelsius = data.readFloat64()
     const airspeedIndicated = data.readFloat64()
     const groundVelocity = data.readFloat64()
     const verticalSpeed = data.readFloat64()
@@ -214,6 +218,8 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
       gsxCargoBoardingPercent,
       gsxPushbackFrozen,
       timeOfDay,
+      outsideAirTemperatureCelsius,
+      totalAirTemperatureCelsius,
       airspeedIndicated,
       groundVelocity,
       verticalSpeed,

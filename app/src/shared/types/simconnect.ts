@@ -37,6 +37,9 @@ export interface SimTelemetry {
   gsxPushbackFrozen?: boolean
   /** SimConnect TIME OF DAY : 1 aube, 2 jour, 3 crépuscule, 4 nuit. */
   timeOfDay?: number
+  /** Température statique extérieure et température totale (avec effet de compression), en °C. */
+  outsideAirTemperatureCelsius?: number
+  totalAirTemperatureCelsius?: number
   airspeedIndicated: number
   groundVelocity: number
   verticalSpeed: number
