@@ -5,6 +5,7 @@ import {
   TABLET_MANIFEST,
   TABLET_SERVICE_WORKER
 } from './tabletPwa'
+import { TABLET_PAGE_HTML } from './tabletPage'
 
 function pngDimensions(image: Buffer): [number, number] {
   expect(image.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
@@ -31,5 +32,18 @@ describe('tablet PWA assets', () => {
   it('provides an application-shell service worker', () => {
     expect(TABLET_SERVICE_WORKER).toContain("self.addEventListener('install'")
     expect(TABLET_SERVICE_WORKER).toContain("self.addEventListener('fetch'")
+  })
+
+  it('renders a real geographic map with the planned route and flown track', () => {
+    expect(TABLET_PAGE_HTML).toContain('https://tile.openstreetmap.org/')
+    expect(TABLET_PAGE_HTML).toContain('© OpenStreetMap')
+    expect(TABLET_PAGE_HTML).toContain('class="map-airport"')
+    expect(TABLET_PAGE_HTML).toContain('stroke="#397cff"')
+  })
+
+  it('keeps the embedded tablet application script syntactically valid', () => {
+    const script = TABLET_PAGE_HTML.match(/<script>([\s\S]*)<\/script>/)?.[1]
+    expect(script).toBeTruthy()
+    expect(() => new Function(script!)).not.toThrow()
   })
 })

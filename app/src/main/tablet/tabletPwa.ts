@@ -112,7 +112,7 @@ export function buildTabletSetupHtml(secureUrls: string[], fingerprint: string):
 
 /** Le cache ne concerne que la coque visuelle. Les données de vol restent toujours lues sur le PC. */
 export const TABLET_SERVICE_WORKER = `
-const CACHE = 'flightops-tablet-v2';
+const CACHE = 'flightops-tablet-v3';
 const SHELL = ['/', '/manifest.webmanifest', '/app-icon-192.png', '/app-icon-512.png', '/app-icon.svg'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())));

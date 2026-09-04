@@ -117,6 +117,17 @@ function getOfpDetail(flightId: number): OfpDetail | null {
 
 function toTabletOfp(detail: OfpDetail | null, includeRoutePath = true): TabletOfpSummary | null {
   if (!detail) return null
+  const routePath = includeRoutePath
+    ? [
+        ...(detail.origin ? [{ lat: detail.origin.lat, lon: detail.origin.lon }] : []),
+        ...detail.navlog.map((fix) => ({ lat: fix.lat, lon: fix.lon })),
+        ...(detail.destination ? [{ lat: detail.destination.lat, lon: detail.destination.lon }] : [])
+      ].filter((point, index, points) => {
+        if (index === 0) return true
+        const previous = points[index - 1]
+        return Math.abs(point.lat - previous.lat) > 0.000001 || Math.abs(point.lon - previous.lon) > 0.000001
+      })
+    : []
   return {
     route: detail.route,
     sidIdent: detail.sidIdent,
@@ -130,7 +141,9 @@ function toTabletOfp(detail: OfpDetail | null, includeRoutePath = true): TabletO
     climbAvgWind: detail.climbAvgWind,
     cruiseAvgWind: detail.cruiseAvgWind,
     descentAvgWind: detail.descentAvgWind,
-    routePath: includeRoutePath ? detail.navlog.map((fix) => ({ lat: fix.lat, lon: fix.lon })) : [],
+    // Les extrémités sont ajoutées explicitement : certains OFP ne répètent pas l'aéroport dans le
+    // navlog, ce qui faisait disparaître la carte tablette avant le deuxième point réellement volé.
+    routePath,
     alternateIcao: detail.alternate?.icaoCode ?? null,
     alternateRoute: detail.alternateRoute,
     alternateCruiseAltitudeFeet: detail.alternateCruiseAltitudeFeet,
@@ -232,7 +245,7 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
     response.writeHead(200, {
       'content-type': 'text/html; charset=utf-8',
       'cache-control': 'no-store',
-      'content-security-policy': "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
+      'content-security-policy': "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data: https://tile.openstreetmap.org"
     })
     response.end(TABLET_PAGE_HTML)
     return
