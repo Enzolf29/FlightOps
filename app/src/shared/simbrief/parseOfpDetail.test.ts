@@ -148,6 +148,12 @@ const SAMPLE_OFP = {
   },
   params: {
     units: 'kgs'
+  },
+  fms_downloads: {
+    directory: 'https://www.simbrief.com/ofp/flightplans/',
+    pdf: {
+      link: 'LFPG_LFRS_PDF_1788123456.pdf'
+    }
   }
 }
 
@@ -216,6 +222,22 @@ describe('parseOfpDetail', () => {
     expect(detail!.aircraftRegistration).toBe('F-HZUF')
   })
 
+  it('builds the complete SimBrief briefing PDF URL', () => {
+    const detail = parseOfpDetail(JSON.stringify(SAMPLE_OFP))
+    expect(detail!.briefingPdfUrl).toBe('https://www.simbrief.com/ofp/flightplans/LFPG_LFRS_PDF_1788123456.pdf')
+  })
+
+  it('rejects a PDF link outside SimBrief', () => {
+    const detail = parseOfpDetail(JSON.stringify({
+      ...SAMPLE_OFP,
+      fms_downloads: {
+        directory: 'https://malicious.example/',
+        pdf: { link: 'briefing.pdf' }
+      }
+    }))
+    expect(detail!.briefingPdfUrl).toBeNull()
+  })
+
   it('extracts the separate alternate route/cruise plan (own SimBrief-computed leg, not a diversion from destination)', () => {
     const detail = parseOfpDetail(JSON.stringify(SAMPLE_OFP))
     expect(detail!.alternateRoute).toBe('UMLA1G UMLAT T418 WELIN T420 ELVOS DCT TNT DCT')
@@ -239,5 +261,6 @@ describe('parseOfpDetail', () => {
     expect(detail!.loadsheet).toBeNull()
     expect(detail!.alternateRoute).toBeNull()
     expect(detail!.alternateNavlog).toEqual([])
+    expect(detail!.briefingPdfUrl).toBeNull()
   })
 })

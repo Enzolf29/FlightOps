@@ -8,6 +8,7 @@ function telemetry(overrides: Partial<SimTelemetry>): SimTelemetry {
     latitude: 0,
     longitude: 0,
     altitude: 0,
+    altitudeAboveGround: 0,
     headingTrue: 0,
     bankDegrees: 0,
     pitchDegrees: 0,
@@ -86,9 +87,10 @@ describe('evaluateFlightEvents', () => {
     expect(secondBounce.events.find((e) => e.type === 'landing')).toBeUndefined()
 
     // Mais un atterrissage 30 minutes plus tard est bien le vrai atterrissage du vol.
-    const stillAirborne = telemetry({ onGround: false, simZuluIso: '2026-08-01T12:30:00.000Z' })
+    const stillAirborne = telemetry({ onGround: false, altitudeAboveGround: 1000, simZuluIso: '2026-08-01T12:30:00.000Z' })
+    const qualifiedFlight = evaluateFlightEvents(secondAirborne, stillAirborne, secondBounce.nextFlags)
     const realLanding = telemetry({ onGround: true, simZuluIso: '2026-08-01T12:30:05.000Z' })
-    const landing = evaluateFlightEvents(stillAirborne, realLanding, secondBounce.nextFlags)
+    const landing = evaluateFlightEvents(stillAirborne, realLanding, qualifiedFlight.nextFlags)
     expect(landing.events).toContainEqual(expect.objectContaining({ type: 'landing' }))
   })
 

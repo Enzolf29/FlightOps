@@ -1,0 +1,72 @@
+name: Publier une version Windows
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Vérifier la cohérence de la version
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          if ("v$version" -ne $env:GITHUB_REF_NAME) {
+            throw "Le tag $env:GITHUB_REF_NAME ne correspond pas à la version $version du package.json."
+          }
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Vérifier le code
+        run: npm run typecheck
+
+      - name: Exécuter les tests
+        run: npm test
+
+      - name: Construire l’installateur
+        shell: pwsh
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          npm run build
+          npx electron-builder --win --publish never
+
+      - name: Créer la GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = Get-ChildItem dist -File | Where-Object {
+            $_.Name -like 'FlightOps-Setup-*.exe' -or
+            $_.Name -like 'FlightOps-Setup-*.exe.blockmap' -or
+            $_.Name -eq 'latest.yml'
+          }
+          if (-not ($assets.Name -contains 'latest.yml')) {
+            throw 'latest.yml est absent : la mise à jour automatique ne pourrait pas fonctionner.'
+          }
+          gh release view $env:GITHUB_REF_NAME 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:GITHUB_REF_NAME $assets.FullName --clobber
+          } else {
+            gh release create $env:GITHUB_REF_NAME $assets.FullName --verify-tag --generate-notes --title "FlightOps $env:GITHUB_REF_NAME"
+          }

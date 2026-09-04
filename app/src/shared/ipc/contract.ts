@@ -29,7 +29,8 @@ export const IPC = {
   realFlights: {
     searchRoutes: 'realFlights:searchRoutes',
     suggestFlightNumber: 'realFlights:suggestFlightNumber',
-    listKnownRoutes: 'realFlights:listKnownRoutes'
+    listKnownRoutes: 'realFlights:listKnownRoutes',
+    refreshCompanyRoutes: 'realFlights:refreshCompanyRoutes'
   },
   booking: {
     createFromOfp: 'booking:createFromOfp'
@@ -40,7 +41,8 @@ export const IPC = {
     getById: 'pireps:getById',
     getFlightPath: 'pireps:getFlightPath',
     getApproachProfile: 'pireps:getApproachProfile',
-    getEvents: 'pireps:getEvents'
+    getEvents: 'pireps:getEvents',
+    getTelemetrySamples: 'pireps:getTelemetrySamples'
   },
   flights: {
     list: 'flights:list',
@@ -60,7 +62,9 @@ export const IPC = {
     completeManually: 'simconnect:completeManually',
     getMetar: 'simconnect:getMetar',
     flightEvent: 'simconnect:flightEvent',
-    getFlightEvents: 'simconnect:getFlightEvents'
+    getFlightEvents: 'simconnect:getFlightEvents',
+    getRecorderStatus: 'simconnect:getRecorderStatus',
+    recorderStatusChanged: 'simconnect:recorderStatusChanged'
   },
   stats: {
     getOverview: 'stats:getOverview'
@@ -68,6 +72,23 @@ export const IPC = {
   settings: {
     get: 'settings:get',
     set: 'settings:set'
+  },
+  cabinAnnouncements: {
+    list: 'cabinAnnouncements:list',
+    import: 'cabinAnnouncements:import',
+    remove: 'cabinAnnouncements:remove',
+    setVolume: 'cabinAnnouncements:setVolume'
+  },
+  tablet: {
+    getServerInfo: 'tablet:getServerInfo',
+    publishCabinStatus: 'tablet:publishCabinStatus',
+    cabinCommand: 'tablet:cabinCommand'
+  },
+  updates: {
+    getStatus: 'updates:getStatus',
+    check: 'updates:check',
+    install: 'updates:install',
+    statusChanged: 'updates:statusChanged'
   },
   app: {
     deleteAllData: 'app:deleteAllData',

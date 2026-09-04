@@ -20,6 +20,7 @@ export type FlightEventType =
   | 'altitude_level'
   | 'air_overspeed'
   | 'air_overspeed_end'
+  | 'operational_alert'
 
 export interface FlightEvent {
   simTimeIso: string
@@ -50,6 +51,8 @@ export interface FlightEventFlags {
   /** Heure du dernier décollage détecté (chaque nouveau décollage la remet à jour) — sert à ignorer
    * un rebond au sol juste après comme un faux atterrissage, voir MINIMUM_FLIGHT_DURATION_SECONDS. */
   takeoffSimTimeIso: string | null
+  /** Le vol a réellement pris de la hauteur ; évite qu'un saut GSX soit pris pour un vol. */
+  airborneQualified: boolean
   /** Dernier état confirmé (loggé) de chaque circuit lumière — distinct de la valeur brute lue au
    * tick courant, voir pendingLightStates/LIGHT_CONFIRM_TICKS. */
   confirmedLightStates: Partial<Record<string, boolean>>
@@ -78,6 +81,7 @@ export const INITIAL_FLIGHT_EVENT_FLAGS: FlightEventFlags = {
   pendingPhase: null,
   pendingPhaseStreak: 0,
   takeoffSimTimeIso: null,
+  airborneQualified: false,
   confirmedLightStates: {},
   pendingLightStates: {},
   lastLoggedFlapsPercent: null,
@@ -116,6 +120,7 @@ const BANK_ANGLE_LIMIT_DEGREES = 30
  * envolée relance simplement le chrono.
  */
 export const MINIMUM_FLIGHT_DURATION_SECONDS = 20
+const MINIMUM_REAL_FLIGHT_AGL_FEET = 200
 /**
  * Ticks consécutifs dans le même état avant de vraiment loguer un changement de circuit lumière —
  * certains avions/addons font vaciller le simvar (transition d'animation, logique auto instable)
@@ -212,7 +217,11 @@ export function evaluateFlightEvents(
 
   if (previous.onGround && !current.onGround) {
     events.push(makeEvent(current, 'takeoff', 'info', 'Décollage'))
-    nextFlags = { ...nextFlags, wasAirborne: true, takeoffSimTimeIso: current.simZuluIso }
+    nextFlags = { ...nextFlags, wasAirborne: true, takeoffSimTimeIso: current.simZuluIso, airborneQualified: false }
+  }
+
+  if (!current.onGround && (current.altitudeAboveGround ?? current.altitude) >= MINIMUM_REAL_FLIGHT_AGL_FEET) {
+    nextFlags = { ...nextFlags, airborneQualified: true }
   }
 
   const secondsSinceTakeoff = nextFlags.takeoffSimTimeIso
@@ -223,6 +232,7 @@ export function evaluateFlightEvents(
     !previous.onGround &&
     current.onGround &&
     nextFlags.wasAirborne &&
+    (nextFlags.airborneQualified || nextFlags.takeoffSimTimeIso === null) &&
     (secondsSinceTakeoff === null || secondsSinceTakeoff >= MINIMUM_FLIGHT_DURATION_SECONDS)
   ) {
     events.push(makeEvent(current, 'landing', 'info', 'Atterrissage'))

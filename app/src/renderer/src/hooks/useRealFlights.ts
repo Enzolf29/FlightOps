@@ -27,3 +27,9 @@ export function useListKnownRoutes() {
     mutationFn: (companyId) => window.flightops.realFlights.listKnownRoutes(companyId)
   })
 }
+
+export function useRefreshCompanyRoutes() {
+  return useMutation<RealRouteSearchResult, Error, number>({
+    mutationFn: (companyId) => window.flightops.realFlights.refreshCompanyRoutes(companyId)
+  })
+}

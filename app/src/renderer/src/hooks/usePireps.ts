@@ -43,3 +43,10 @@ export function usePirepEvents(id: number) {
     queryFn: () => window.flightops.pireps.getEvents(id)
   })
 }
+
+export function usePirepTelemetrySamples(id: number) {
+  return useQuery({
+    queryKey: ['pireps', 'telemetrySamples', id],
+    queryFn: () => window.flightops.pireps.getTelemetrySamples(id)
+  })
+}

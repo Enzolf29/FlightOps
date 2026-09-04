@@ -6,6 +6,7 @@ export interface StatItem {
   value: ReactNode
   icon?: ReactNode
   muted?: boolean
+  detail?: ReactNode
 }
 
 interface StatGridProps {
@@ -23,6 +24,7 @@ export function StatGrid({ items, compact = false }: StatGridProps) {
             {item.label}
           </span>
           <span className={item.muted ? 'stat-card-value stat-card-value--muted' : 'stat-card-value'}>{item.value}</span>
+          {item.detail ? <span className="stat-card-detail">{item.detail}</span> : null}
         </div>
       ))}
     </div>

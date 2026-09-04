@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { SimConnectStatus, SimTelemetry } from '@shared/types/simconnect'
+import type { FlightRecorderStatus, SimConnectStatus, SimTelemetry } from '@shared/types/simconnect'
 
 export function useSimConnectStatus(): SimConnectStatus | null {
   const [status, setStatus] = useState<SimConnectStatus | null>(null)
@@ -25,4 +25,22 @@ export function useSimTelemetry(): SimTelemetry | null {
   useEffect(() => window.flightops.simconnect.onTelemetry((value) => setTelemetry(value)), [])
 
   return telemetry
+}
+
+export function useFlightRecorderStatus(): FlightRecorderStatus | null {
+  const [recorder, setRecorder] = useState<FlightRecorderStatus | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    window.flightops.simconnect.getRecorderStatus().then((value) => {
+      if (!cancelled) setRecorder(value)
+    })
+    const unsubscribe = window.flightops.simconnect.onRecorderStatusChange(setRecorder)
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [])
+
+  return recorder
 }

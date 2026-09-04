@@ -15,10 +15,13 @@ import {
   getActualDepartureIso,
   getArmedFlightId,
   getFlightEvents,
+  getFlightRecorderStatus,
   getLiveFlightPath,
   handleLandingPrecisionTick,
   handleTelemetryTick,
-  onFlightEvent
+  onFlightEvent,
+  onFlightRecorderStatus,
+  recoverFlightSession
 } from '../simconnect/flightStatusDetector'
 
 function broadcast(channel: string, payload: unknown): void {
@@ -34,6 +37,7 @@ export function registerSimconnectHandlers(): void {
     handleTelemetryTick(telemetry)
   })
   onFlightEvent((event) => broadcast(IPC.simconnect.flightEvent, event))
+  onFlightRecorderStatus((status) => broadcast(IPC.simconnect.recorderStatusChanged, status))
   onLandingPrecisionTick((sample) => handleLandingPrecisionTick(sample))
 
   ipcMain.handle(IPC.simconnect.getStatus, () => getStatus())
@@ -45,6 +49,8 @@ export function registerSimconnectHandlers(): void {
   ipcMain.handle(IPC.simconnect.getMetar, (_event, icaoCode: string) => requestMetar(icaoCode))
   ipcMain.handle(IPC.simconnect.getFlightEvents, () => getFlightEvents())
   ipcMain.handle(IPC.simconnect.getLiveFlightPath, () => getLiveFlightPath())
+  ipcMain.handle(IPC.simconnect.getRecorderStatus, () => getFlightRecorderStatus())
 
+  recoverFlightSession()
   startConnectionManager()
 }

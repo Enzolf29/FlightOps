@@ -10,10 +10,13 @@ import type { AdsbdbAircraftLookup } from '@shared/types/adsbdb'
 import type { RealRoute, RealRouteSearchResult } from '@shared/types/realFlights'
 import type { CreateFlightFromOfpInput } from '@shared/types/booking'
 import type { FlightWithRelations } from '@shared/types/flight'
-import type { PirepApproachProfilePoint, PirepFlightPathPoint, PirepWithFlight } from '@shared/types/pirep'
-import type { SimConnectStatus, SimTelemetry } from '@shared/types/simconnect'
+import type { PirepApproachProfilePoint, PirepFlightPathPoint, PirepTelemetrySample, PirepWithFlight } from '@shared/types/pirep'
+import type { FlightRecorderStatus, SimConnectStatus, SimTelemetry } from '@shared/types/simconnect'
 import type { StatisticsOverview } from '@shared/types/statistics'
 import type { FlightEvent } from '@shared/flightStatus/evaluateFlightEvents'
+import type { CabinAnnouncementFile, CabinAnnouncementType } from '@shared/types/cabinAnnouncements'
+import type { TabletCabinCommand, TabletCabinStatus, TabletServerInfo } from '@shared/types/tablet'
+import type { AppUpdateStatus } from '@shared/types/appUpdate'
 import type { FlightopsApi } from '@shared/ipc/api'
 
 const flightopsApi: FlightopsApi = {
@@ -55,7 +58,9 @@ const flightopsApi: FlightopsApi = {
     suggestFlightNumber: (routeId: number): Promise<string | null> =>
       ipcRenderer.invoke(IPC.realFlights.suggestFlightNumber, routeId),
     listKnownRoutes: (companyId: number): Promise<RealRoute[]> =>
-      ipcRenderer.invoke(IPC.realFlights.listKnownRoutes, companyId)
+      ipcRenderer.invoke(IPC.realFlights.listKnownRoutes, companyId),
+    refreshCompanyRoutes: (companyId: number): Promise<RealRouteSearchResult> =>
+      ipcRenderer.invoke(IPC.realFlights.refreshCompanyRoutes, companyId)
   },
   booking: {
     createFromOfp: (input: CreateFlightFromOfpInput): Promise<FlightWithRelations> =>
@@ -69,7 +74,8 @@ const flightopsApi: FlightopsApi = {
     getFlightPath: (id: number): Promise<PirepFlightPathPoint[]> => ipcRenderer.invoke(IPC.pireps.getFlightPath, id),
     getApproachProfile: (id: number): Promise<PirepApproachProfilePoint[]> =>
       ipcRenderer.invoke(IPC.pireps.getApproachProfile, id),
-    getEvents: (id: number): Promise<FlightEvent[]> => ipcRenderer.invoke(IPC.pireps.getEvents, id)
+    getEvents: (id: number): Promise<FlightEvent[]> => ipcRenderer.invoke(IPC.pireps.getEvents, id),
+    getTelemetrySamples: (id: number): Promise<PirepTelemetrySample[]> => ipcRenderer.invoke(IPC.pireps.getTelemetrySamples, id)
   },
   flights: {
     list: (): Promise<FlightWithRelations[]> => ipcRenderer.invoke(IPC.flights.list),
@@ -101,6 +107,12 @@ const flightopsApi: FlightopsApi = {
       const wrapped = (_event: IpcRendererEvent, flightEvent: FlightEvent): void => listener(flightEvent)
       ipcRenderer.on(IPC.simconnect.flightEvent, wrapped)
       return () => ipcRenderer.removeListener(IPC.simconnect.flightEvent, wrapped)
+    },
+    getRecorderStatus: (): Promise<FlightRecorderStatus> => ipcRenderer.invoke(IPC.simconnect.getRecorderStatus),
+    onRecorderStatusChange: (listener: (status: FlightRecorderStatus) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, status: FlightRecorderStatus): void => listener(status)
+      ipcRenderer.on(IPC.simconnect.recorderStatusChanged, wrapped)
+      return () => ipcRenderer.removeListener(IPC.simconnect.recorderStatusChanged, wrapped)
     }
   },
   stats: {
@@ -110,6 +122,36 @@ const flightopsApi: FlightopsApi = {
     get: (): Promise<AppSettings> => ipcRenderer.invoke(IPC.settings.get),
     set: <K extends keyof AppSettings>(key: K, value: AppSettings[K]): Promise<AppSettings> =>
       ipcRenderer.invoke(IPC.settings.set, key, value)
+  },
+  cabinAnnouncements: {
+    list: (companyId: number): Promise<CabinAnnouncementFile[]> =>
+      ipcRenderer.invoke(IPC.cabinAnnouncements.list, companyId),
+    import: (companyId: number, type: CabinAnnouncementType): Promise<CabinAnnouncementFile | null> =>
+      ipcRenderer.invoke(IPC.cabinAnnouncements.import, companyId, type),
+    remove: (companyId: number, type: CabinAnnouncementType): Promise<void> =>
+      ipcRenderer.invoke(IPC.cabinAnnouncements.remove, companyId, type),
+    setVolume: (companyId: number, type: CabinAnnouncementType, volume: number): Promise<CabinAnnouncementFile> =>
+      ipcRenderer.invoke(IPC.cabinAnnouncements.setVolume, companyId, type, volume)
+  },
+  tablet: {
+    getServerInfo: (): Promise<TabletServerInfo> => ipcRenderer.invoke(IPC.tablet.getServerInfo),
+    publishCabinStatus: (status: TabletCabinStatus): Promise<void> =>
+      ipcRenderer.invoke(IPC.tablet.publishCabinStatus, status),
+    onCabinCommand: (listener: (command: TabletCabinCommand) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, command: TabletCabinCommand): void => listener(command)
+      ipcRenderer.on(IPC.tablet.cabinCommand, wrapped)
+      return () => ipcRenderer.removeListener(IPC.tablet.cabinCommand, wrapped)
+    }
+  },
+  updates: {
+    getStatus: (): Promise<AppUpdateStatus> => ipcRenderer.invoke(IPC.updates.getStatus),
+    check: (): Promise<AppUpdateStatus> => ipcRenderer.invoke(IPC.updates.check),
+    install: (): Promise<void> => ipcRenderer.invoke(IPC.updates.install),
+    onStatusChange: (listener: (status: AppUpdateStatus) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, status: AppUpdateStatus): void => listener(status)
+      ipcRenderer.on(IPC.updates.statusChanged, wrapped)
+      return () => ipcRenderer.removeListener(IPC.updates.statusChanged, wrapped)
+    }
   },
   app: {
     openExternal: (url: string): Promise<void> => ipcRenderer.invoke(IPC.app.openExternal, url),

@@ -1,5 +1,6 @@
 import { getDb } from '../index'
 import type { Flight, FlightSource, FlightStatus, FlightWithRelations } from '@shared/types/flight'
+import { shouldAutoCancelFlight } from '@shared/flightStatus/shouldAutoCancelFlight'
 
 interface FlightJoinRow {
   id: number
@@ -34,6 +35,25 @@ const SELECT_WITH_RELATIONS = `
   JOIN companies c ON c.id = f.company_id
   LEFT JOIN aircraft a ON a.id = f.aircraft_id
 `
+
+/** Met à jour en base tous les vols jamais démarrés dont le départ prévu est dépassé de plus de 3 h. */
+export function cancelExpiredUpcomingFlights(nowIso = new Date().toISOString()): number {
+  const candidates = getDb()
+    .prepare("SELECT id, scheduled_departure FROM flights WHERE status = 'upcoming'")
+    .all() as Array<{ id: number; scheduled_departure: string }>
+  const expiredIds = candidates
+    .filter((flight) => shouldAutoCancelFlight(flight.scheduled_departure, nowIso))
+    .map((flight) => flight.id)
+  if (expiredIds.length === 0) return 0
+
+  const update = getDb().prepare("UPDATE flights SET status = 'cancelled', updated_at = datetime('now') WHERE id = ? AND status = 'upcoming'")
+  const apply = getDb().transaction((ids: number[]) => {
+    let changed = 0
+    for (const id of ids) changed += update.run(id).changes
+    return changed
+  })
+  return apply(expiredIds)
+}
 
 function mapFlight(row: FlightJoinRow): FlightWithRelations {
   const flight: Flight = {
@@ -72,6 +92,7 @@ export function getCurrentFlight(): FlightWithRelations | null {
 }
 
 export function getNextFlight(): FlightWithRelations | null {
+  cancelExpiredUpcomingFlights()
   const row = getDb()
     .prepare(`${SELECT_WITH_RELATIONS} WHERE f.status = 'upcoming' ORDER BY f.scheduled_departure ASC LIMIT 1`)
     .get() as FlightJoinRow | undefined
@@ -79,6 +100,7 @@ export function getNextFlight(): FlightWithRelations | null {
 }
 
 export function getUpcomingFlights(excludeFlightId: number | null, limit: number): FlightWithRelations[] {
+  cancelExpiredUpcomingFlights()
   const rows = getDb()
     .prepare(
       `${SELECT_WITH_RELATIONS} WHERE f.status = 'upcoming' AND f.id != ? ORDER BY f.scheduled_departure ASC LIMIT ?`
@@ -93,6 +115,7 @@ export function getFlightWithRelationsById(id: number): FlightWithRelations | nu
 }
 
 export function getAllFlights(): FlightWithRelations[] {
+  cancelExpiredUpcomingFlights()
   const rows = getDb().prepare(`${SELECT_WITH_RELATIONS} ORDER BY f.scheduled_departure DESC`).all() as FlightJoinRow[]
   return rows.map(mapFlight)
 }

@@ -2,21 +2,24 @@ import { useState } from 'react'
 import type { OfpDetail } from '@shared/simbrief/parseOfpDetail'
 import type { Wind } from '@shared/simbrief/averageWind'
 import { StatGrid } from '@renderer/components/StatGrid'
+import { LoadsheetDocumentModal } from '@renderer/components/LoadsheetDocumentModal'
+import { SimbriefPdfModal } from '@renderer/components/SimbriefPdfModal'
+import { useCabinAnnouncementStore } from '@renderer/stores/cabinAnnouncementStore'
+import type { FlightWithRelations } from '@shared/types/flight'
 import {
+  ClipboardIcon,
   ClockIcon,
   DollarSignIcon,
   DropletIcon,
-  PackageIcon,
   RouteIcon,
   ThermometerIcon,
   TrendingUpIcon,
-  UsersIcon,
-  WeightIcon,
   WindIcon
 } from '@renderer/components/icons'
 
 interface OfpSummaryPanelProps {
   ofp: OfpDetail
+  flight: FlightWithRelations
 }
 
 function RouteTokens({
@@ -53,23 +56,17 @@ function RouteTokens({
   )
 }
 
-function formatWeight(value: number | null, units: 'kgs' | 'lbs'): string {
-  if (value === null) return '—'
-  return `${Math.round(value).toLocaleString('fr-FR')} ${units}`
-}
-
-function formatWeightRange(estimated: number | null, max: number | null, units: 'kgs' | 'lbs'): string {
-  return `${formatWeight(estimated, units)} / ${formatWeight(max, units)}`
-}
-
 function formatWind(wind: Wind | null): string {
   if (!wind) return '—'
   return `${Math.round(wind.dirDegrees)}° / ${Math.round(wind.speedKt)} kt`
 }
 
-export function OfpSummaryPanel({ ofp }: OfpSummaryPanelProps) {
+export function OfpSummaryPanel({ ofp, flight }: OfpSummaryPanelProps) {
   const hasAlternate = ofp.alternate !== null
   const [tab, setTab] = useState<'destination' | 'alternate'>('destination')
+  const [loadsheetOpen, setLoadsheetOpen] = useState(false)
+  const [briefingPdfOpen, setBriefingPdfOpen] = useState(false)
+  const finalLoadsheet = useCabinAnnouncementStore((state) => state.finalLoadsheet)
   const showAlternate = hasAlternate && tab === 'alternate'
 
   return (
@@ -171,79 +168,35 @@ export function OfpSummaryPanel({ ofp }: OfpSummaryPanelProps) {
         </>
       )}
 
-      {ofp.loadsheet ? (
-        <>
-          <div className="ofp-summary-divider">Loadsheet</div>
-          <StatGrid
-            items={[
-              { key: 'pax', label: 'Passagers', value: ofp.loadsheet.paxCount ?? '—', icon: <UsersIcon /> },
-              {
-                key: 'cargo',
-                label: 'Fret',
-                value: formatWeight(ofp.loadsheet.cargo, ofp.loadsheet.units),
-                icon: <PackageIcon />
-              },
-              {
-                key: 'zfw',
-                label: 'ZFW (estimé / max)',
-                value: formatWeightRange(ofp.loadsheet.estZfw, ofp.loadsheet.maxZfw, ofp.loadsheet.units),
-                icon: <WeightIcon />
-              },
-              {
-                key: 'tow',
-                label: 'TOW (estimé / max)',
-                value: formatWeightRange(ofp.loadsheet.estTow, ofp.loadsheet.maxTow, ofp.loadsheet.units),
-                icon: <WeightIcon />
-              },
-              {
-                key: 'ldw',
-                label: 'LDW (estimé / max)',
-                value: formatWeightRange(ofp.loadsheet.estLdw, ofp.loadsheet.maxLdw, ofp.loadsheet.units),
-                icon: <WeightIcon />
-              },
-              {
-                key: 'ramp',
-                label: 'Poids au départ',
-                value: formatWeight(ofp.loadsheet.estRamp, ofp.loadsheet.units),
-                icon: <WeightIcon />
-              }
-            ]}
-          />
-          <StatGrid
-            items={[
-              {
-                key: 'fuelTakeoff',
-                label: 'Carburant décollage',
-                value: formatWeight(ofp.loadsheet.fuelTakeoff, ofp.loadsheet.units),
-                icon: <DropletIcon />
-              },
-              {
-                key: 'fuelLanding',
-                label: 'Carburant atterrissage',
-                value: formatWeight(ofp.loadsheet.fuelLanding, ofp.loadsheet.units),
-                icon: <DropletIcon />
-              },
-              {
-                key: 'fuelReserve',
-                label: 'Réserve',
-                value: formatWeight(ofp.loadsheet.fuelReserve, ofp.loadsheet.units),
-                icon: <DropletIcon />
-              },
-              {
-                key: 'fuelExtra',
-                label: 'Extra',
-                value: formatWeight(ofp.loadsheet.fuelExtra, ofp.loadsheet.units),
-                icon: <DropletIcon />
-              },
-              {
-                key: 'fuelRamp',
-                label: 'Carburant total',
-                value: formatWeight(ofp.loadsheet.fuelRamp, ofp.loadsheet.units),
-                icon: <DropletIcon />
-              }
-            ]}
-          />
-        </>
+      {ofp.loadsheet || ofp.briefingPdfUrl ? (
+        <div className="loadsheet-launch">
+          <div className="loadsheet-launch-icon"><ClipboardIcon size={22} /></div>
+          <div className="loadsheet-launch-copy">
+            <strong>Documents de vol</strong>
+            <span>{ofp.loadsheet ? (finalLoadsheet ? 'LoadSheet finale disponible · briefing SimBrief complet' : 'LoadSheet prévisionnelle · briefing SimBrief complet') : 'Briefing SimBrief complet'}</span>
+          </div>
+          {ofp.loadsheet ? (
+            <span className={`loadsheet-launch-status ${finalLoadsheet ? 'loadsheet-launch-status--final' : ''}`}>
+              {finalLoadsheet ? 'FINAL' : 'PRELIMINARY'}
+            </span>
+          ) : null}
+          <div className="loadsheet-launch-actions">
+            {ofp.briefingPdfUrl ? (
+              <button type="button" className="secondary" onClick={() => setBriefingPdfOpen(true)}>Briefing PDF complet</button>
+            ) : null}
+            {ofp.loadsheet ? (
+              <button type="button" className="primary" onClick={() => setLoadsheetOpen(true)}>LoadSheet</button>
+            ) : null}
+          </div>
+          {ofp.loadsheet && loadsheetOpen ? <LoadsheetDocumentModal ofp={ofp} flight={flight} onClose={() => setLoadsheetOpen(false)} /> : null}
+          {ofp.briefingPdfUrl && briefingPdfOpen ? (
+            <SimbriefPdfModal
+              pdfUrl={ofp.briefingPdfUrl}
+              flightLabel={`${flight.flightNumber} · ${flight.departureIcao}–${flight.arrivalIcao}`}
+              onClose={() => setBriefingPdfOpen(false)}
+            />
+          ) : null}
+        </div>
       ) : null}
     </div>
   )

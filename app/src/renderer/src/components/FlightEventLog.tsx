@@ -21,7 +21,8 @@ const EVENT_ICON: Record<FlightEventType, string> = {
   descent: '📉',
   altitude_level: '🎚️',
   air_overspeed: '⚠️',
-  air_overspeed_end: '✅'
+  air_overspeed_end: '✅',
+  operational_alert: '⚠️'
 }
 
 interface FlightEventLogProps {
@@ -29,11 +30,14 @@ interface FlightEventLogProps {
 }
 
 export function FlightEventLog({ events }: FlightEventLogProps) {
-  if (events.length === 0) {
+  // Les anciennes sessions peuvent encore contenir les alertes opérationnelles désormais
+  // supprimées. Elles restent dans les données historiques, mais ne sont plus affichées.
+  const visibleEvents = events.filter((event) => event.type !== 'operational_alert')
+  if (visibleEvents.length === 0) {
     return <p className="empty-hint">Aucun évènement enregistré pour l’instant.</p>
   }
 
-  const ordered = [...events].reverse()
+  const ordered = [...visibleEvents].reverse()
 
   return (
     <div className="event-log">

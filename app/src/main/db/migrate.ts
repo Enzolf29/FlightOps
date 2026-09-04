@@ -14,6 +14,11 @@ import migration012 from './migrations/012_real_routes.sql?raw'
 import migration013 from './migrations/013_airport_coordinates.sql?raw'
 import migration014 from './migrations/014_drop_airport_coordinates.sql?raw'
 import migration015 from './migrations/015_pirep_touchdown_airspeed.sql?raw'
+import migration016 from './migrations/016_flight_recorder.sql?raw'
+import migration017 from './migrations/017_telemetry_replay_details.sql?raw'
+import migration018 from './migrations/018_cabin_announcements.sql?raw'
+import migration019 from './migrations/019_cabin_announcement_volume.sql?raw'
+import migration020 from './migrations/020_real_route_observations.sql?raw'
 
 interface Migration {
   version: number
@@ -35,7 +40,12 @@ const MIGRATIONS: Migration[] = [
   { version: 12, sql: migration012 },
   { version: 13, sql: migration013 },
   { version: 14, sql: migration014 },
-  { version: 15, sql: migration015 }
+  { version: 15, sql: migration015 },
+  { version: 16, sql: migration016 },
+  { version: 17, sql: migration017 },
+  { version: 18, sql: migration018 },
+  { version: 19, sql: migration019 },
+  { version: 20, sql: migration020 }
 ]
 
 export function runMigrations(db: Database.Database): void {

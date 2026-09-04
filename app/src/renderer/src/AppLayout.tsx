@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Sidebar } from '@renderer/components/Sidebar'
 import { useThemeStore } from '@renderer/stores/themeStore'
 import { useSimConnectStatus } from '@renderer/hooks/useSimConnect'
+import { CabinAnnouncementPlayer } from '@renderer/components/CabinAnnouncementPlayer'
 
 export function AppLayout() {
   const ready = useThemeStore((state) => state.ready)
@@ -25,6 +26,7 @@ export function AppLayout() {
       queryClient.invalidateQueries({ queryKey: ['home', 'dashboard'] })
       queryClient.invalidateQueries({ queryKey: ['simconnect', 'armedFlightId'] })
       queryClient.invalidateQueries({ queryKey: ['pireps'] })
+      queryClient.invalidateQueries({ queryKey: ['fleet', 'aircraft'] })
     }, 5000)
     return () => clearInterval(interval)
   }, [status, queryClient])
@@ -35,6 +37,7 @@ export function AppLayout() {
 
   return (
     <div className="app-shell">
+      <CabinAnnouncementPlayer />
       <Sidebar />
       <main className="app-content">
         <Outlet />

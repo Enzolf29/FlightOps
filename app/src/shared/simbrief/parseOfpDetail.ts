@@ -81,6 +81,8 @@ export interface OfpDetail {
   alternateEteMinutes: number | null
   alternateBurn: number | null
   alternateNavlog: OfpNavlogFix[]
+  /** Lien vers le dossier de vol complet généré par SimBrief au format PDF. */
+  briefingPdfUrl: string | null
 }
 
 function toNumber(value: unknown): number | null {
@@ -92,6 +94,30 @@ function toNumber(value: unknown): number | null {
 function toStringOrNull(value: unknown): string | null {
   if (typeof value !== 'string' || value.length === 0) return null
   return value
+}
+
+function parseBriefingPdfUrl(raw: unknown): string | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const downloads = raw as Record<string, unknown>
+  const directory = toStringOrNull(downloads.directory)
+  const pdf = typeof downloads.pdf === 'object' && downloads.pdf !== null
+    ? downloads.pdf as Record<string, unknown>
+    : null
+  const link = pdf ? toStringOrNull(pdf.link) : null
+  if (!link) return null
+
+  let parsed: URL
+  try {
+    parsed = new URL(link, directory ?? undefined)
+  } catch {
+    return null
+  }
+
+  const hostname = parsed.hostname.toLowerCase()
+  if (parsed.protocol !== 'https:' || (hostname !== 'simbrief.com' && !hostname.endsWith('.simbrief.com'))) {
+    return null
+  }
+  return parsed.toString()
 }
 
 function parseAirport(raw: unknown): OfpAirportSummary | null {
@@ -234,6 +260,7 @@ export function parseOfpDetail(rawJson: string): OfpDetail | null {
     alternateDistanceNm: toNumber(alternateRaw.distance),
     alternateEteMinutes: alternateEteSeconds !== null ? Math.round(alternateEteSeconds / 60) : null,
     alternateBurn: toNumber(alternateRaw.burn),
-    alternateNavlog
+    alternateNavlog,
+    briefingPdfUrl: parseBriefingPdfUrl(root.fms_downloads)
   }
 }

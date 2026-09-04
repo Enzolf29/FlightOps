@@ -8,6 +8,7 @@ import { attachMetarClient } from './metarClient'
 
 const RECONNECT_DELAY_MS = 10_000
 const APP_NAME = 'FlightOps'
+const EVENT_SIM_STATE = 0xf101
 
 type StatusListener = (status: SimConnectStatus) => void
 type TelemetryListener = (telemetry: SimTelemetry) => void
@@ -19,6 +20,7 @@ let stopTelemetry: (() => void) | null = null
 let stopLandingPrecision: (() => void) | null = null
 let stopMetarClient: (() => void) | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let simulationActive = false
 
 const statusListeners = new Set<StatusListener>()
 const telemetryListeners = new Set<TelemetryListener>()
@@ -62,8 +64,18 @@ function connect(): void {
       handle = connection
       setStatus('connected')
 
+      // L'évènement système "Sim" renvoie immédiatement l'état courant puis 1/0 à chaque passage
+      // entre une session pilotable et les écrans de chargement / menus. C'est plus fiable que de
+      // déduire un vol chargé à partir de TITLE ou des L:vars GSX, qui gardent parfois d'anciennes
+      // valeurs dans le shell de MSFS.
+      connection.subscribeToSystemEvent(EVENT_SIM_STATE, 'Sim')
+      connection.on('event', (event) => {
+        if (event.clientEventId === EVENT_SIM_STATE) simulationActive = event.data === 1
+      })
+
       stopTelemetry = startTelemetryLoop(connection, (telemetry) => {
-        for (const listener of telemetryListeners) listener(telemetry)
+        const telemetryWithSession = { ...telemetry, simulationActive }
+        for (const listener of telemetryListeners) listener(telemetryWithSession)
       })
       stopLandingPrecision = startLandingPrecisionLoop(connection, (sample) => {
         for (const listener of landingPrecisionListeners) listener(sample)
@@ -82,6 +94,7 @@ function connect(): void {
 }
 
 function handleDisconnect(): void {
+  simulationActive = false
   if (stopTelemetry) {
     stopTelemetry()
     stopTelemetry = null

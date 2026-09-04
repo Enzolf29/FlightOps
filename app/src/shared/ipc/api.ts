@@ -7,10 +7,13 @@ import type { AdsbdbAircraftLookup } from '../types/adsbdb'
 import type { RealRoute, RealRouteSearchResult } from '../types/realFlights'
 import type { CreateFlightFromOfpInput } from '../types/booking'
 import type { FlightWithRelations } from '../types/flight'
-import type { PirepApproachProfilePoint, PirepFlightPathPoint, PirepWithFlight } from '../types/pirep'
-import type { SimConnectStatus, SimTelemetry } from '../types/simconnect'
+import type { PirepApproachProfilePoint, PirepFlightPathPoint, PirepTelemetrySample, PirepWithFlight } from '../types/pirep'
+import type { FlightRecorderStatus, SimConnectStatus, SimTelemetry } from '../types/simconnect'
 import type { StatisticsOverview } from '../types/statistics'
 import type { FlightEvent } from '../flightStatus/evaluateFlightEvents'
+import type { CabinAnnouncementFile, CabinAnnouncementType } from '../types/cabinAnnouncements'
+import type { TabletCabinCommand, TabletCabinStatus, TabletServerInfo } from '../types/tablet'
+import type { AppUpdateStatus } from '../types/appUpdate'
 
 export interface FlightopsApi {
   home: {
@@ -44,6 +47,7 @@ export interface FlightopsApi {
     searchRoutes: (companyId: number, departureIcao: string, forceRefresh?: boolean) => Promise<RealRouteSearchResult>
     suggestFlightNumber: (routeId: number) => Promise<string | null>
     listKnownRoutes: (companyId: number) => Promise<RealRoute[]>
+    refreshCompanyRoutes: (companyId: number) => Promise<RealRouteSearchResult>
   }
   booking: {
     createFromOfp: (input: CreateFlightFromOfpInput) => Promise<FlightWithRelations>
@@ -55,6 +59,7 @@ export interface FlightopsApi {
     getFlightPath: (id: number) => Promise<PirepFlightPathPoint[]>
     getApproachProfile: (id: number) => Promise<PirepApproachProfilePoint[]>
     getEvents: (id: number) => Promise<FlightEvent[]>
+    getTelemetrySamples: (id: number) => Promise<PirepTelemetrySample[]>
   }
   flights: {
     list: () => Promise<FlightWithRelations[]>
@@ -75,6 +80,8 @@ export interface FlightopsApi {
     getMetar: (icaoCode: string) => Promise<string>
     getFlightEvents: () => Promise<FlightEvent[]>
     onFlightEvent: (listener: (event: FlightEvent) => void) => () => void
+    getRecorderStatus: () => Promise<FlightRecorderStatus>
+    onRecorderStatusChange: (listener: (status: FlightRecorderStatus) => void) => () => void
   }
   stats: {
     getOverview: () => Promise<StatisticsOverview>
@@ -82,6 +89,23 @@ export interface FlightopsApi {
   settings: {
     get: () => Promise<AppSettings>
     set: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<AppSettings>
+  }
+  cabinAnnouncements: {
+    list: (companyId: number) => Promise<CabinAnnouncementFile[]>
+    import: (companyId: number, type: CabinAnnouncementType) => Promise<CabinAnnouncementFile | null>
+    remove: (companyId: number, type: CabinAnnouncementType) => Promise<void>
+    setVolume: (companyId: number, type: CabinAnnouncementType, volume: number) => Promise<CabinAnnouncementFile>
+  }
+  tablet: {
+    getServerInfo: () => Promise<TabletServerInfo>
+    publishCabinStatus: (status: TabletCabinStatus) => Promise<void>
+    onCabinCommand: (listener: (command: TabletCabinCommand) => void) => () => void
+  }
+  updates: {
+    getStatus: () => Promise<AppUpdateStatus>
+    check: () => Promise<AppUpdateStatus>
+    install: () => Promise<void>
+    onStatusChange: (listener: (status: AppUpdateStatus) => void) => () => void
   }
   app: {
     openExternal: (url: string) => Promise<void>

@@ -1,19 +1,43 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { AircraftWithStats } from '@shared/types/aircraft'
 import type { Company } from '@shared/types/company'
 import type { RealRoute } from '@shared/types/realFlights'
-import { useCompanies } from '@renderer/hooks/useCompanies'
-import { useAircraft } from '@renderer/hooks/useAircraft'
-import { useListKnownRoutes, useSearchRealRoutes, useSuggestFlightNumber } from '@renderer/hooks/useRealFlights'
-import { CompanyPicker } from '@renderer/components/CompanyPicker'
-import { Modal } from '@renderer/components/Modal'
-import { RealFlightsMap } from '@renderer/components/RealFlightsMap'
-import { getAirportLabel } from '@shared/airports/airportNames'
 import { getAirportCoordinates } from '@shared/airports/airportCoordinates'
-import { buildDispatchPrefillUrl } from '@shared/simbrief/buildDispatchPrefillUrl'
+import { getAirportLabel } from '@shared/airports/airportNames'
 import { generateCallsign } from '@shared/callsign/generateCallsign'
+import { getAirportRegion, type AirportRegion } from '@shared/realFlights/getAirportRegion'
+import {
+  getFleetRouteMatch,
+  rankFleetAircraftForRoute,
+  type FleetRouteMatch
+} from '@shared/realFlights/matchFleetAircraftToRoute'
+import { buildDispatchPrefillUrl } from '@shared/simbrief/buildDispatchPrefillUrl'
+import { useAircraft } from '@renderer/hooks/useAircraft'
+import { useCompanies } from '@renderer/hooks/useCompanies'
+import {
+  useListKnownRoutes,
+  useRefreshCompanyRoutes,
+  useSearchRealRoutes,
+  useSuggestFlightNumber
+} from '@renderer/hooks/useRealFlights'
+import { CompanyPicker } from './CompanyPicker'
+import { Modal } from './Modal'
+import { RealFlightsMap } from './RealFlightsMap'
 
-type SortKey = 'destination' | 'duration' | 'aircraftCount'
+type SortKey = 'destination' | 'duration' | 'aircraftCount' | 'frequency'
 type SortDirection = 'asc' | 'desc'
+type AvailabilityFilter = '' | FleetRouteMatch
+
+const REGION_LABELS: Record<AirportRegion, string> = {
+  europe: 'Europe',
+  africa: 'Afrique',
+  middle_east: 'Moyen-Orient',
+  asia: 'Asie',
+  north_america: 'Amérique du Nord',
+  south_america: 'Amérique du Sud',
+  oceania: 'Océanie',
+  other: 'Autre zone'
+}
 
 function formatDuration(minutes: number | null): string {
   if (minutes === null) return '—'
@@ -28,61 +52,78 @@ function parseHhMmToMinutes(value: string): number | null {
   if (!match) return null
   const hours = Number(match[1])
   const minutes = Number(match[2])
-  return hours * 60 + minutes
+  return minutes <= 59 ? hours * 60 + minutes : null
+}
+
+function parseUtcTimestamp(value: string | null): number | null {
+  if (!value) return null
+  const timestamp = Date.parse(value.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(value) ? value : `${value}Z`)
+  return Number.isFinite(timestamp) ? timestamp : null
+}
+
+function formatCacheAge(value: string | null): string {
+  const timestamp = parseUtcTimestamp(value)
+  if (timestamp === null) return 'ancien cache'
+  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000))
+  if (minutes < 2) return "à l'instant"
+  if (minutes < 60) return `il y a ${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  return hours < 24 ? `il y a ${hours}h` : `il y a ${Math.floor(hours / 24)} j`
 }
 
 function compareRoutes(a: RealRoute, b: RealRoute, key: SortKey): number {
-  switch (key) {
-    case 'duration':
-      return (a.typicalDurationMinutes ?? Infinity) - (b.typicalDurationMinutes ?? Infinity)
-    case 'aircraftCount':
-      return a.aircraft.length - b.aircraft.length
-    case 'destination':
-    default:
-      return a.arrivalIcao.localeCompare(b.arrivalIcao)
-  }
+  if (key === 'duration') return (a.typicalDurationMinutes ?? Infinity) - (b.typicalDurationMinutes ?? Infinity)
+  if (key === 'aircraftCount') return a.aircraft.length - b.aircraft.length
+  if (key === 'frequency') return a.observationCount - b.observationCount
+  return a.arrivalIcao.localeCompare(b.arrivalIcao)
 }
 
-interface SortHeaderProps {
+function observationLabel(count: number): string {
+  if (count <= 0) return 'Fréquence non mesurée'
+  return count === 1 ? 'Observé 1 fois' : `Observé ${count} fois`
+}
+
+function frequencyTone(count: number): string {
+  if (count >= 3) return 'badge-on-time'
+  return count === 1 ? 'badge-muted' : 'badge-neutral'
+}
+
+function SortHeader({ label, sortKey, activeKey, direction, onSort }: {
   label: string
   sortKey: SortKey
   activeKey: SortKey
   direction: SortDirection
   onSort: (key: SortKey) => void
-}
-
-function SortHeader({ label, sortKey, activeKey, direction, onSort }: SortHeaderProps) {
+}) {
   const isActive = sortKey === activeKey
   return (
     <button type="button" className={'fleet-table-sort' + (isActive ? ' active' : '')} onClick={() => onSort(sortKey)}>
-      {label}
-      <span className="fleet-table-sort-arrow">{isActive ? (direction === 'asc' ? '▲' : '▼') : ''}</span>
+      {label}<span className="fleet-table-sort-arrow">{isActive ? (direction === 'asc' ? '▲' : '▼') : ''}</span>
     </button>
   )
 }
 
-interface RealFlightsBrowserProps {
-  onGenerated: () => void
-}
-
-export function RealFlightsBrowser({ onGenerated }: RealFlightsBrowserProps) {
+export function RealFlightsBrowser({ onGenerated }: { onGenerated: () => void }) {
   const { data: companies } = useCompanies()
   const [companyId, setCompanyId] = useState<number | null>(null)
+  const { data: fleetAircraft } = useAircraft(companyId ?? undefined)
   const [departureIcao, setDepartureIcao] = useState('')
-  const [sortKey, setSortKey] = useState<SortKey>('destination')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const [arrivalFilter, setArrivalFilter] = useState('')
+  const [sortKey, setSortKey] = useState<SortKey>('frequency')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [aircraftFilter, setAircraftFilter] = useState('')
   const [maxDurationTime, setMaxDurationTime] = useState('')
-  const [selectedRoute, setSelectedRoute] = useState<RealRoute | null>(null)
+  const [regionFilter, setRegionFilter] = useState<AirportRegion | ''>('')
+  const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>('')
+  const [sourceFilter, setSourceFilter] = useState<'' | 'api' | 'reciprocal'>('')
+  const [focusedRouteId, setFocusedRouteId] = useState<number | null>(null)
+  const [bookingRoute, setBookingRoute] = useState<RealRoute | null>(null)
   const [resultMode, setResultMode] = useState<'search' | 'browseAll' | null>(null)
-
   const search = useSearchRealRoutes()
   const browseAll = useListKnownRoutes()
+  const refreshCompany = useRefreshCompanyRoutes()
   const selectedCompany = companies?.find((company) => company.id === companyId) ?? null
 
-  // Dès qu'une compagnie est choisie sans aéroport de départ précisé, on affiche tout de suite ce
-  // qui est déjà connu en cache (real_routes) — sans appel API — plutôt que d'attendre une action
-  // explicite : "tous les vols connus" doit apparaître même sans indiquer de départ.
   useEffect(() => {
     if (companyId && !departureIcao.trim()) {
       setResultMode('browseAll')
@@ -91,10 +132,26 @@ export function RealFlightsBrowser({ onGenerated }: RealFlightsBrowserProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId])
 
-  const activeRoutes = resultMode === 'browseAll' ? browseAll.data : search.data?.routes
-  const isPending = resultMode === 'browseAll' ? browseAll.isPending : search.isPending
-  const isError = resultMode === 'browseAll' ? browseAll.isError : search.isError
-  const activeError = resultMode === 'browseAll' ? browseAll.error : search.error
+  const activeRoutes = resultMode === 'browseAll' ? (refreshCompany.data?.routes ?? browseAll.data) : search.data?.routes
+  const isPending = resultMode === 'browseAll' ? browseAll.isPending || refreshCompany.isPending : search.isPending
+  const isError = resultMode === 'browseAll' ? browseAll.isError || refreshCompany.isError : search.isError
+  const activeError = resultMode === 'browseAll' ? refreshCompany.error ?? browseAll.error : search.error
+
+  function resetForCompany(id: number) {
+    setCompanyId(id)
+    setFocusedRouteId(null)
+    setBookingRoute(null)
+    setDepartureIcao('')
+    setArrivalFilter('')
+    setAircraftFilter('')
+    setMaxDurationTime('')
+    setRegionFilter('')
+    setAvailabilityFilter('')
+    setSourceFilter('')
+    search.reset()
+    browseAll.reset()
+    refreshCompany.reset()
+  }
 
   function handleSearch(forceRefresh: boolean) {
     if (!companyId) return
@@ -109,89 +166,89 @@ export function RealFlightsBrowser({ onGenerated }: RealFlightsBrowserProps) {
   }
 
   function handleSort(key: SortKey) {
-    if (key === sortKey) {
-      setSortDirection((direction) => (direction === 'asc' ? 'desc' : 'asc'))
-    } else {
+    if (key === sortKey) setSortDirection((direction) => direction === 'asc' ? 'desc' : 'asc')
+    else {
       setSortKey(key)
-      setSortDirection('asc')
+      setSortDirection(key === 'frequency' ? 'desc' : 'asc')
     }
+  }
+
+  function focusRoute(routeId: number, scrollToList = true) {
+    setFocusedRouteId(routeId)
+    if (!scrollToList) return
+    requestAnimationFrame(() => {
+      document.getElementById(`real-route-${routeId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
   }
 
   const allAircraftTypes = useMemo(() => {
-    const set = new Set<string>()
-    for (const route of activeRoutes ?? []) {
-      for (const aircraft of route.aircraft) set.add(aircraft.typeDescription)
-    }
-    return [...set].sort()
+    const entries = new Map<string, string>()
+    for (const route of activeRoutes ?? []) for (const aircraft of route.aircraft) entries.set(aircraft.icaoType, aircraft.typeDescription)
+    return [...entries.entries()].sort((a, b) => a[1].localeCompare(b[1]))
+  }, [activeRoutes])
+
+  const availableRegions = useMemo(() => {
+    const set = new Set<AirportRegion>()
+    for (const route of activeRoutes ?? []) set.add(getAirportRegion(route.arrivalIcao))
+    return [...set].sort((a, b) => REGION_LABELS[a].localeCompare(REGION_LABELS[b]))
   }, [activeRoutes])
 
   const visibleRoutes = useMemo(() => {
-    const routes = activeRoutes ?? []
     const maxMinutes = parseHhMmToMinutes(maxDurationTime)
-
-    const filtered = routes.filter((route) => {
-      if (aircraftFilter && !route.aircraft.some((aircraft) => aircraft.typeDescription === aircraftFilter)) {
-        return false
-      }
-      if (maxMinutes !== null && (route.typicalDurationMinutes === null || route.typicalDurationMinutes > maxMinutes)) {
-        return false
-      }
+    const normalizedArrival = arrivalFilter.trim().toUpperCase()
+    return [...(activeRoutes ?? []).filter((route) => {
+      if (aircraftFilter && !route.aircraft.some((aircraft) => aircraft.icaoType === aircraftFilter)) return false
+      if (maxMinutes !== null && (route.typicalDurationMinutes === null || route.typicalDurationMinutes > maxMinutes)) return false
+      if (regionFilter && getAirportRegion(route.arrivalIcao) !== regionFilter) return false
+      if (sourceFilter && route.source !== sourceFilter) return false
+      if (normalizedArrival && !route.arrivalIcao.includes(normalizedArrival) && !getAirportLabel(route.arrivalIcao).toUpperCase().includes(normalizedArrival)) return false
+      if (availabilityFilter && !(fleetAircraft ?? []).some((item) => getFleetRouteMatch(item, route) === availabilityFilter)) return false
       return true
-    })
+    })].sort((a, b) => compareRoutes(a, b, sortKey) * (sortDirection === 'asc' ? 1 : -1))
+  }, [activeRoutes, aircraftFilter, maxDurationTime, regionFilter, sourceFilter, arrivalFilter, availabilityFilter, fleetAircraft, sortKey, sortDirection])
 
-    return [...filtered].sort((a, b) => compareRoutes(a, b, sortKey) * (sortDirection === 'asc' ? 1 : -1))
-  }, [activeRoutes, aircraftFilter, maxDurationTime, sortKey, sortDirection])
+  const suggestions = useMemo(() => {
+    if (!fleetAircraft) return []
+    return (activeRoutes ?? []).flatMap((route) => {
+      const aircraft = fleetAircraft.filter((item) => getFleetRouteMatch(item, route) === 'positioned')
+      return aircraft.length > 0 ? [{ route, aircraft }] : []
+    }).sort((a, b) => b.route.observationCount - a.route.observationCount).slice(0, 6)
+  }, [activeRoutes, fleetAircraft])
 
-  const mapRoutes = useMemo(
-    () =>
-      visibleRoutes
-        .map((route) => {
-          const departureCoords = getAirportCoordinates(route.departureIcao)
-          const arrivalCoords = getAirportCoordinates(route.arrivalIcao)
-          if (!departureCoords || !arrivalCoords) return null
-          return {
-            id: route.id,
-            departure: { icao: route.departureIcao, ...departureCoords },
-            arrival: { icao: route.arrivalIcao, ...arrivalCoords }
-          }
-        })
-        .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
-    [visibleRoutes]
-  )
+  const mapRoutes = useMemo(() => visibleRoutes.map((route) => {
+    const departure = getAirportCoordinates(route.departureIcao)
+    const arrival = getAirportCoordinates(route.arrivalIcao)
+    if (!departure || !arrival) return null
+    return {
+      id: route.id,
+      departure: { icao: route.departureIcao, ...departure },
+      arrival: { icao: route.arrivalIcao, ...arrival },
+      source: route.source,
+      observationCount: route.observationCount
+    }
+  }).filter((entry): entry is NonNullable<typeof entry> => entry !== null), [visibleRoutes])
   const routesMissingCoordinates = visibleRoutes.length - mapRoutes.length
+  const newestCache = [...(activeRoutes ?? [])]
+    .map((route) => route.lastFetchedAt)
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => (parseUtcTimestamp(b) ?? 0) - (parseUtcTimestamp(a) ?? 0))[0] ?? null
 
-  if (!companies) {
-    return <p className="page-loading">Chargement…</p>
-  }
+  if (!companies) return <p className="page-loading">Chargement…</p>
 
   return (
     <div className="real-flights">
       <div className="form-field">
         <span>Compagnie</span>
-        <CompanyPicker
-          companies={companies}
-          value={companyId}
-          onChange={(id) => {
-            setCompanyId(id)
-            setSelectedRoute(null)
-          }}
-        />
+        <CompanyPicker companies={companies} value={companyId} onChange={resetForCompany} />
       </div>
 
       <label className="form-field">
         <span>Aéroport de départ (optionnel)</span>
         <div className="form-inline-group">
-          <input
-            value={departureIcao}
-            onChange={(event) => setDepartureIcao(event.target.value.toUpperCase())}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') handleSearch(false)
-            }}
-            placeholder="LFPG"
-            maxLength={4}
-          />
+          <input value={departureIcao} onChange={(event) => setDepartureIcao(event.target.value.toUpperCase())}
+            onKeyDown={(event) => { if (event.key === 'Enter') handleSearch(false) }} placeholder="LFPG" maxLength={4} />
           <button type="button" className="primary" onClick={() => handleSearch(false)} disabled={!companyId || isPending}>
-            {isPending ? 'Recherche…' : departureIcao.trim() ? 'Rechercher' : 'Voir tous les vols connus'}
+            {isPending ? 'Chargement…' : departureIcao.trim() ? 'Rechercher' : 'Voir tout le réseau connu'}
           </button>
         </div>
       </label>
@@ -200,100 +257,125 @@ export function RealFlightsBrowser({ onGenerated }: RealFlightsBrowserProps) {
 
       {activeRoutes ? (
         <>
-          <p className="empty-hint">
-            {resultMode === 'browseAll'
-              ? 'Tous les vols déjà connus en cache local pour cette compagnie, tous aéroports de départ confondus.'
-              : search.data?.fetchedFromApi
-                ? 'Résultats récupérés depuis AeroDataBox.'
-                : 'Résultats depuis le cache local.'}{' '}
-            {resultMode === 'search' ? (
-              <button type="button" className="settings-link" onClick={() => handleSearch(true)} disabled={isPending}>
-                Actualiser depuis l'API
-              </button>
-            ) : null}
-          </p>
+          <div className="real-flights-cache-bar">
+            <span><strong>{activeRoutes.length} route{activeRoutes.length > 1 ? 's' : ''}</strong> dans la base locale{newestCache ? ` · cache actualisé ${formatCacheAge(newestCache)}` : ''}</span>
+            <button type="button" className="secondary"
+              onClick={resultMode === 'browseAll' ? () => companyId && refreshCompany.mutate(companyId) : () => handleSearch(true)}
+              disabled={isPending}>
+              {isPending ? 'Actualisation…' : resultMode === 'browseAll' ? 'Actualiser la compagnie' : "Actualiser l'aéroport"}
+            </button>
+          </div>
 
           {activeRoutes.length === 0 ? (
-            <p className="empty-hint">
-              {resultMode === 'browseAll'
-                ? `Aucun vol connu en cache pour ${selectedCompany?.displayName}. Indiquez un aéroport de départ pour interroger l'API.`
-                : `Aucune route trouvée pour ${selectedCompany?.displayName} au départ de ${departureIcao.trim().toUpperCase()}.`}
-            </p>
+            <p className="empty-hint">{resultMode === 'browseAll'
+              ? `Aucun vol connu pour ${selectedCompany?.displayName}. Indiquez un aéroport de départ pour alimenter la base locale.`
+              : `Aucune route trouvée pour ${selectedCompany?.displayName} au départ de ${departureIcao.trim().toUpperCase()}.`}</p>
           ) : (
             <>
-              <div className="real-flights-toolbar">
-                <label>
-                  Filtrer par avion{' '}
-                  <select value={aircraftFilter} onChange={(event) => setAircraftFilter(event.target.value)}>
-                    <option value="">Tous</option>
-                    {allAircraftTypes.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
+              {suggestions.length > 0 ? (
+                <section className="real-flights-suggestions">
+                  <div className="real-flights-section-heading">
+                    <div><span className="eyebrow">Suggestions prêtes à voler</span><h3>Avions compatibles déjà au départ</h3></div>
+                    <span className="badge badge-on-time">Position flotte vérifiée</span>
+                  </div>
+                  <div className="real-flights-suggestion-grid">
+                    {suggestions.map(({ route, aircraft }) => (
+                      <button key={route.id} type="button" onClick={() => focusRoute(route.id)}>
+                        <strong>{route.departureIcao} → {route.arrivalIcao}</strong>
+                        <span>{aircraft.map((item) => item.registration ?? item.type).join(', ')} au départ</span>
+                        <small>{formatDuration(route.typicalDurationMinutes)} · {observationLabel(route.observationCount)}</small>
+                      </button>
                     ))}
-                  </select>
-                </label>
-                <label>
-                  Durée max{' '}
-                  <input
-                    type="time"
-                    className="real-flights-duration-input"
-                    value={maxDurationTime}
-                    onChange={(event) => setMaxDurationTime(event.target.value)}
-                  />
-                </label>
-              </div>
-
-              <RealFlightsMap
-                routes={mapRoutes}
-                onSelectRoute={(routeId) => {
-                  const route = visibleRoutes.find((item) => item.id === routeId)
-                  if (route) setSelectedRoute(route)
-                }}
-              />
-              {routesMissingCoordinates > 0 ? (
-                <p className="empty-hint">
-                  {routesMissingCoordinates} route{routesMissingCoordinates > 1 ? 's' : ''} sans coordonnées connues,
-                  non affichée{routesMissingCoordinates > 1 ? 's' : ''} sur la carte.
-                </p>
+                  </div>
+                </section>
               ) : null}
 
-              {visibleRoutes.length === 0 ? (
-                <p className="empty-hint">Aucune route ne correspond aux filtres actuels.</p>
-              ) : (
+              <div className="real-flights-toolbar">
+                <label>Arrivée<input value={arrivalFilter} onChange={(event) => setArrivalFilter(event.target.value)} placeholder="OACI ou ville" /></label>
+                <label>Zone<select value={regionFilter} onChange={(event) => setRegionFilter(event.target.value as AirportRegion | '')}>
+                  <option value="">Toutes</option>{availableRegions.map((region) => <option key={region} value={region}>{REGION_LABELS[region]}</option>)}
+                </select></label>
+                <label>Avion observé<select value={aircraftFilter} onChange={(event) => setAircraftFilter(event.target.value)}>
+                  <option value="">Tous</option>{allAircraftTypes.map(([icao, description]) => <option key={icao} value={icao}>{description}</option>)}
+                </select></label>
+                <label>Durée max<input type="time" className="real-flights-duration-input" value={maxDurationTime} onChange={(event) => setMaxDurationTime(event.target.value)} /></label>
+                <label>Ma flotte<select value={availabilityFilter} onChange={(event) => setAvailabilityFilter(event.target.value as AvailabilityFilter)}>
+                  <option value="">Tous les vols</option><option value="positioned">Compatible et sur place</option><option value="compatible">Compatible ailleurs</option>
+                </select></label>
+                <label>Origine<select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value as '' | 'api' | 'reciprocal')}>
+                  <option value="">Toutes</option><option value="api">Observées</option><option value="reciprocal">Retours déduits</option>
+                </select></label>
+              </div>
+
+              <RealFlightsMap routes={mapRoutes} selectedRouteId={focusedRouteId} onSelectRoute={(routeId) => focusRoute(routeId)} />
+              {routesMissingCoordinates > 0 ? <p className="empty-hint">{routesMissingCoordinates} route{routesMissingCoordinates > 1 ? 's' : ''} sans coordonnées, non affichée{routesMissingCoordinates > 1 ? 's' : ''} sur la carte.</p> : null}
+
+              {visibleRoutes.length === 0 ? <p className="empty-hint">Aucune route ne correspond aux filtres actuels.</p> : (
                 <div className="real-flights-list">
                   <div className="real-flights-row real-flights-header">
-                    <SortHeader label="Destination" sortKey="destination" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                    <SortHeader label="Route" sortKey="destination" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
                     <SortHeader label="Avion(s)" sortKey="aircraftCount" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
                     <SortHeader label="Durée" sortKey="duration" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
-                    <span>Statut</span>
+                    <SortHeader label="Fréquence" sortKey="frequency" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                    <span>Disponibilité</span><span>Source</span>
                   </div>
-
-                  {visibleRoutes.map((route) => (
-                    <button
-                      type="button"
-                      key={route.id}
-                      className="real-flights-row"
-                      onClick={() => setSelectedRoute(route)}
-                    >
-                      <span className="real-flights-route">
-                        {getAirportLabel(route.departureIcao)} → {getAirportLabel(route.arrivalIcao)}
-                      </span>
-                      <span className="real-flights-aircraft">
-                        {route.aircraft.length > 0
-                          ? route.aircraft.map((aircraft) => (
-                              <span key={aircraft.icaoType} className="badge badge-neutral">
-                                {aircraft.typeDescription}
-                              </span>
-                            ))
-                          : <span className="badge badge-muted">Avion inconnu</span>}
-                      </span>
-                      <span className="real-flights-duration">{formatDuration(route.typicalDurationMinutes)}</span>
-                      <span className={'badge ' + (route.source === 'api' ? 'badge-on-time' : 'badge-muted')}>
-                        {route.source === 'api' ? 'Confirmé' : 'Déduit (retour)'}
-                      </span>
-                    </button>
-                  ))}
+                  {visibleRoutes.map((route) => {
+                    const positioned = (fleetAircraft ?? []).filter((item) => getFleetRouteMatch(item, route) === 'positioned')
+                    const compatible = (fleetAircraft ?? []).filter((item) => getFleetRouteMatch(item, route) === 'compatible')
+                    const focused = focusedRouteId === route.id
+                    return (
+                      <div key={route.id} id={`real-route-${route.id}`} className={'real-flights-route-entry' + (focused ? ' real-flights-route-entry--focused' : '')}>
+                        <button type="button" className="real-flights-row" onClick={() => focusRoute(route.id, false)} aria-expanded={focused}>
+                          <span className="real-flights-route"><strong>{route.departureIcao} → {route.arrivalIcao}</strong><small>{getAirportLabel(route.arrivalIcao)}</small></span>
+                          <span className="real-flights-aircraft">{route.aircraft.length > 0 ? route.aircraft.map((aircraft) => (
+                            <span key={aircraft.icaoType} className="real-flights-aircraft-observation">
+                              <span className="badge badge-neutral">{aircraft.typeDescription}</span>{aircraft.observationCount > 0 ? <small>{aircraft.observationCount}×</small> : null}
+                            </span>
+                          )) : <span className="badge badge-muted">Avion inconnu</span>}</span>
+                          <span className="real-flights-duration">{formatDuration(route.typicalDurationMinutes)}</span>
+                          <span className={`badge ${frequencyTone(route.observationCount)}`}>{observationLabel(route.observationCount)}</span>
+                          <span className="real-flights-availability">{positioned.length > 0
+                            ? <span className="badge badge-on-time">{positioned.map((item) => item.registration ?? item.type).join(', ')} sur place</span>
+                            : compatible.length > 0 ? <span className="badge badge-neutral">{compatible.length} compatible{compatible.length > 1 ? 's' : ''} ailleurs</span>
+                              : <span className="badge badge-muted">Aucun sur place</span>}</span>
+                          <span className="real-flights-source"><span className={'badge ' + (route.source === 'api' ? 'badge-on-time' : 'badge-muted')}>{route.source === 'api' ? 'Observé' : 'Retour déduit'}</span><small>{formatCacheAge(route.lastFetchedAt)}</small></span>
+                        </button>
+                        {focused ? (
+                          <div className="real-flights-route-detail">
+                            <div className="real-flights-route-detail-heading">
+                              <div>
+                                <span className="eyebrow">Route sélectionnée</span>
+                                <h3>{getAirportLabel(route.departureIcao)} → {getAirportLabel(route.arrivalIcao)}</h3>
+                              </div>
+                              <button type="button" className="primary" onClick={() => setBookingRoute(route)}>Réserver ce vol</button>
+                            </div>
+                            <div className="real-flights-route-detail-grid">
+                              <div><small>Durée typique</small><strong>{formatDuration(route.typicalDurationMinutes)}</strong></div>
+                              <div><small>Fréquence connue</small><strong>{observationLabel(route.observationCount)}</strong></div>
+                              <div><small>Dernière observation</small><strong>{route.lastObservedAt ? formatCacheAge(route.lastObservedAt) : 'Non mesurée'}</strong></div>
+                              <div><small>Origine</small><strong>{route.source === 'api' ? 'AeroDataBox · observée' : 'Trajet retour déduit'}</strong></div>
+                            </div>
+                            <div className="real-flights-route-detail-sections">
+                              <div>
+                                <small>Avions observés sur la ligne</small>
+                                <div className="real-flights-aircraft">{route.aircraft.length > 0 ? route.aircraft.map((aircraft) => (
+                                  <span key={aircraft.icaoType} className="badge badge-neutral">{aircraft.typeDescription}{aircraft.observationCount > 0 ? ` · ${aircraft.observationCount}×` : ''}</span>
+                                )) : <span className="badge badge-muted">Avion inconnu</span>}</div>
+                              </div>
+                              <div>
+                                <small>Avions de votre flotte</small>
+                                <div className="real-flights-aircraft">{positioned.length > 0 ? positioned.map((item) => (
+                                  <span key={item.id} className="badge badge-on-time">{item.registration ?? item.type} · déjà à {route.departureIcao}</span>
+                                )) : compatible.length > 0 ? compatible.map((item) => (
+                                  <span key={item.id} className="badge badge-neutral">{item.registration ?? item.type} · à {item.lastKnownIcao ?? 'position inconnue'}</span>
+                                )) : <span className="badge badge-muted">Aucun avion compatible identifié</span>}</div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </>
@@ -301,34 +383,29 @@ export function RealFlightsBrowser({ onGenerated }: RealFlightsBrowserProps) {
         </>
       ) : null}
 
-      {selectedRoute && selectedCompany ? (
-        <BookRealRouteModal
-          route={selectedRoute}
-          company={selectedCompany}
-          onClose={() => setSelectedRoute(null)}
-          onGenerated={onGenerated}
-        />
-      ) : null}
+      {bookingRoute && selectedCompany ? <BookRealRouteModal route={bookingRoute} company={selectedCompany} onClose={() => setBookingRoute(null)} onGenerated={onGenerated} /> : null}
     </div>
   )
 }
 
-interface BookRealRouteModalProps {
+function aircraftOptionLabel(item: AircraftWithStats, route: RealRoute): string {
+  const identity = `${item.type}${item.registration ? ` (${item.registration})` : ''}`
+  const match = getFleetRouteMatch(item, route)
+  if (match === 'positioned') return `${identity} — sur place à ${route.departureIcao}`
+  if (match === 'compatible') return `${identity} — compatible, position ${item.lastKnownIcao ?? 'inconnue'}`
+  return `${identity} — type non observé sur cette route`
+}
+
+function BookRealRouteModal({ route, company, onClose, onGenerated }: {
   route: RealRoute
   company: Company
   onClose: () => void
   onGenerated: () => void
-}
-
-function BookRealRouteModal({ route, company, onClose, onGenerated }: BookRealRouteModalProps) {
+}) {
   const { data: fleetAircraft } = useAircraft(company.id)
   const suggestFlightNumber = useSuggestFlightNumber()
-
-  const defaultAircraft = useMemo(() => {
-    if (!fleetAircraft) return null
-    return fleetAircraft.find((item) => route.aircraft.some((aircraft) => aircraft.icaoType === item.simbriefIcaoCode)) ?? null
-  }, [fleetAircraft, route])
-
+  const rankedAircraft = useMemo(() => rankFleetAircraftForRoute(fleetAircraft ?? [], route), [fleetAircraft, route])
+  const defaultAircraft = rankedAircraft.find((item) => getFleetRouteMatch(item, route) !== 'incompatible') ?? null
   const [aircraftId, setAircraftId] = useState<number | null>(null)
   const [flightNumberDigits, setFlightNumberDigits] = useState('')
   const [suggestionTried, setSuggestionTried] = useState(false)
@@ -336,23 +413,15 @@ function BookRealRouteModal({ route, company, onClose, onGenerated }: BookRealRo
   const [time, setTime] = useState('')
   const [generated, setGenerated] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
   const selectedAircraft = fleetAircraft?.find((item) => item.id === aircraftId) ?? null
 
-  useEffect(() => {
-    if (defaultAircraft && aircraftId === null) setAircraftId(defaultAircraft.id)
-  }, [defaultAircraft, aircraftId])
-
+  useEffect(() => { if (defaultAircraft && aircraftId === null) setAircraftId(defaultAircraft.id) }, [defaultAircraft, aircraftId])
   useEffect(() => {
     setSuggestionTried(false)
     suggestFlightNumber.mutate(route.id, {
-      onSuccess: (digits) => {
-        setSuggestionTried(true)
-        if (digits) setFlightNumberDigits(digits)
-      },
+      onSuccess: (digits) => { setSuggestionTried(true); if (digits) setFlightNumberDigits(digits) },
       onError: () => setSuggestionTried(true)
     })
-    // La recherche du numéro de vol se relance uniquement quand la route sélectionnée change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.id])
 
@@ -361,23 +430,14 @@ function BookRealRouteModal({ route, company, onClose, onGenerated }: BookRealRo
       setError('Renseignez un avion de la flotte, la date et l’heure de départ.')
       return
     }
-
-    const aircraftIcaoType = selectedAircraft.simbriefIcaoCode || selectedAircraft.type
     const scheduledDeparture = new Date(`${date}T${time}:00Z`)
-    const durationMinutes = route.typicalDurationMinutes ?? 90
-    const scheduledArrival = new Date(scheduledDeparture.getTime() + durationMinutes * 60000)
-
-    const { raw: callsign } = generateCallsign({
-      icaoCode: company.icaoCode,
-      radioCallsign: company.radioCallsign,
-      pattern: company.callsignPattern
-    })
-
+    const scheduledArrival = new Date(scheduledDeparture.getTime() + (route.typicalDurationMinutes ?? 90) * 60000)
+    const { raw: callsign } = generateCallsign({ icaoCode: company.icaoCode, radioCallsign: company.radioCallsign, pattern: company.callsignPattern })
     setError(null)
-    const url = buildDispatchPrefillUrl({
+    window.flightops.app.openExternal(buildDispatchPrefillUrl({
       originIcao: route.departureIcao,
       destIcao: route.arrivalIcao,
-      aircraftIcaoType,
+      aircraftIcaoType: selectedAircraft.simbriefIcaoCode || selectedAircraft.type,
       airlineIcao: company.icaoCode,
       flightNumberDigits: flightNumberDigits.trim() || undefined,
       registration: selectedAircraft.registration,
@@ -385,87 +445,32 @@ function BookRealRouteModal({ route, company, onClose, onGenerated }: BookRealRo
       callsign,
       scheduledDeparture,
       scheduledArrival
-    })
-
-    window.flightops.app.openExternal(url)
+    }))
     setGenerated(true)
   }
 
   return (
     <Modal title={`${route.departureIcao} → ${route.arrivalIcao}`} onClose={onClose}>
       {generated ? (
-        <div className="booking-success">
-          <p>
-            Plan ouvert dans votre navigateur. Terminez-le sur SimBrief, puis revenez sur l'onglet « Importer depuis
-            SimBrief » pour finaliser le vol.
-          </p>
-          <button
-            type="button"
-            className="primary"
-            onClick={() => {
-              onGenerated()
-              onClose()
-            }}
-          >
-            Y aller maintenant
-          </button>
-        </div>
+        <div className="booking-success"><p>Plan ouvert dans votre navigateur. Terminez-le sur SimBrief, puis revenez sur l'onglet « Importer depuis SimBrief » pour finaliser le vol.</p>
+          <button type="button" className="primary" onClick={() => { onGenerated(); onClose() }}>Y aller maintenant</button></div>
       ) : (
         <div className="form">
-          <div className="form-field">
-            <span>Avion de la flotte</span>
-            <select
-              value={aircraftId ?? ''}
-              onChange={(event) => setAircraftId(event.target.value ? Number(event.target.value) : null)}
-            >
-              <option value="">Choisir…</option>
-              {(fleetAircraft ?? []).map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.type} {item.registration ? `(${item.registration})` : ''}
-                </option>
-              ))}
+          <div className="form-field"><span>Avion de la flotte</span>
+            <select value={aircraftId ?? ''} onChange={(event) => setAircraftId(event.target.value ? Number(event.target.value) : null)}>
+              <option value="">Choisir…</option>{rankedAircraft.map((item) => <option key={item.id} value={item.id}>{aircraftOptionLabel(item, route)}</option>)}
             </select>
+            {defaultAircraft && getFleetRouteMatch(defaultAircraft, route) === 'positioned' ? <span className="form-hint form-hint-success">Avion compatible sélectionné automatiquement : il est déjà à {route.departureIcao}.</span> : null}
           </div>
-
-          <label className="form-field">
-            <span>Numéro de vol</span>
-            <div className="form-inline-group">
-              <span className="real-flights-iata-prefix">{company.iataCode}</span>
-              <input
-                value={flightNumberDigits}
-                onChange={(event) => setFlightNumberDigits(event.target.value.toUpperCase())}
-                placeholder="1445"
-              />
-            </div>
-            {suggestFlightNumber.isPending ? (
-              <span className="form-hint">Recherche d'un numéro de vol observé sur cette route…</span>
-            ) : suggestionTried && !flightNumberDigits ? (
-              <span className="form-hint">Aucun numéro observé sur cette route, saisissez-en un.</span>
-            ) : null}
-          </label>
-
-          <label className="form-field">
-            <span>Date de départ (UTC)</span>
-            <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-          </label>
-
-          <label className="form-field">
-            <span>Heure de départ (UTC)</span>
-            <input type="time" value={time} onChange={(event) => setTime(event.target.value)} />
-          </label>
-
+          <label className="form-field"><span>Numéro de vol</span><div className="form-inline-group"><span className="real-flights-iata-prefix">{company.iataCode}</span>
+            <input value={flightNumberDigits} onChange={(event) => setFlightNumberDigits(event.target.value.toUpperCase())} placeholder="1445" /></div>
+            {suggestFlightNumber.isPending ? <span className="form-hint">Recherche d'un numéro de vol observé sur cette route…</span>
+              : suggestionTried && !flightNumberDigits ? <span className="form-hint">Aucun numéro observé sur cette route, saisissez-en un.</span> : null}</label>
+          <label className="form-field"><span>Date de départ (UTC)</span><input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
+          <label className="form-field"><span>Heure de départ (UTC)</span><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /></label>
           <p className="form-hint">Durée de vol typique : {formatDuration(route.typicalDurationMinutes)}</p>
-
           {error ? <p className="form-error">{error}</p> : null}
-
-          <div className="form-actions">
-            <button type="button" onClick={onClose}>
-              Annuler
-            </button>
-            <button type="button" className="primary" onClick={handleGenerate}>
-              Générer le plan sur SimBrief
-            </button>
-          </div>
+          <div className="form-actions"><button type="button" onClick={onClose}>Annuler</button><button type="button" className="primary" onClick={handleGenerate}>Générer le plan sur SimBrief</button></div>
         </div>
       )}
     </Modal>

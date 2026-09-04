@@ -19,8 +19,10 @@ import { AIRPORT_NAMES } from '@shared/airports/airportNames'
 import { formatDateTime, formatHours, parseUtc } from '@renderer/lib/format'
 import { DELAY_BUCKET_LABEL, DELAY_BUCKET_VARIANT } from '@renderer/lib/labels'
 import { formatDelayDuration } from '@shared/flightStatus/formatDelayDuration'
-import { usePirepApproachProfile, usePirepEvents, usePirepFlightPath } from '@renderer/hooks/usePireps'
+import { usePirepApproachProfile, usePirepEvents, usePirepFlightPath, usePirepTelemetrySamples } from '@renderer/hooks/usePireps'
 import { useOfpDetail } from '@renderer/hooks/useOfpDetail'
+import { PirepReplay } from './PirepReplay'
+import { analyzePirepTelemetry, scoreComfort, scoreFuel, scoreLanding, scorePunctuality } from '@shared/flightStatus/analyzePirepTelemetry'
 
 interface PirepDetailProps {
   pirep: PirepWithFlight
@@ -48,12 +50,31 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
   const { data: flightPath } = usePirepFlightPath(pirep.id)
   const { data: approachProfile } = usePirepApproachProfile(pirep.id)
   const { data: events } = usePirepEvents(pirep.id)
+  const { data: telemetrySamples } = usePirepTelemetrySamples(pirep.id)
   const { data: ofp } = useOfpDetail(flight.id, flight.source === 'simbrief')
 
   const approachChartData = (approachProfile ?? []).map((point) => ({
     time: formatInTimeZone(parseUtc(point.timeIso), 'UTC', 'HH:mm:ss'),
     altitude: Math.round(point.altitudeFeet),
     groundSpeed: Math.round(point.groundSpeedKt)
+  }))
+  const telemetryAnalysis = analyzePirepTelemetry(telemetrySamples ?? [])
+  const actualFuelUsed = pirep.fuelAtEngineStartKg !== null && pirep.fuelAtEngineStopKg !== null
+    ? Math.max(0, pirep.fuelAtEngineStartKg - pirep.fuelAtEngineStopKg)
+    : null
+  const plannedRampFuel = ofp?.loadsheet?.fuelRamp
+  const plannedLandingFuel = ofp?.loadsheet?.fuelLanding
+  const plannedFuelUsedRaw = plannedRampFuel != null && plannedLandingFuel != null
+    ? plannedRampFuel - plannedLandingFuel
+    : null
+  const plannedFuelUsed = plannedFuelUsedRaw === null ? null : ofp?.loadsheet?.units === 'lbs' ? plannedFuelUsedRaw / 2.2046226218 : plannedFuelUsedRaw
+  const scheduledMinutes = Math.max(0, (parseUtc(flight.scheduledArrival).getTime() - parseUtc(flight.scheduledDeparture).getTime()) / 60000)
+  const warningEvents = (events ?? []).filter((event) => event.severity === 'warning')
+  const telemetryChartData = (telemetrySamples ?? []).map((sample) => ({
+    time: formatInTimeZone(parseUtc(sample.timeIso), 'UTC', 'HH:mm'),
+    altitude: Math.round(sample.altitudeFeet),
+    speed: Math.round(sample.groundSpeedKt),
+    fuel: Math.round(sample.fuelKg)
   }))
 
   return (
@@ -143,6 +164,68 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
           telemetry={null}
           staticTrail={(flightPath ?? []).map((point) => [point.lat, point.lon])}
         />
+      </section>
+
+      <section className="pirep-detail-section">
+        <h3>Relecture du vol</h3>
+        <PirepReplay pirepId={pirep.id} callsign={flight.callsignDisplay} samples={telemetrySamples ?? []} ofp={ofp} />
+      </section>
+
+      <section className="pirep-detail-section">
+        <h3>Prévu SimBrief / Réalisé</h3>
+        <div className="pirep-comparison-grid">
+          <Comparison label="Durée" planned={`${Math.round(scheduledMinutes)} min`} actual={`${Math.round(pirep.flightTimeMinutes ?? 0)} min`} />
+          <Comparison label="Carburant consommé" planned={formatKg(plannedFuelUsed)} actual={formatKg(actualFuelUsed)} />
+          <Comparison label="Distance" planned={ofp?.routeDistanceNm ? `${Math.round(ofp.routeDistanceNm)} NM` : '—'} actual={telemetryAnalysis.actualDistanceNm ? `${Math.round(telemetryAnalysis.actualDistanceNm)} NM` : '—'} />
+          <Comparison label="Route" planned={ofp?.route ?? flight.route ?? '—'} actual="Trajectoire enregistrée sur la carte" />
+        </div>
+      </section>
+
+      <section className="pirep-detail-section">
+        <h3>Analyse de l’approche</h3>
+        <div className="approach-check-grid">
+          {[telemetryAnalysis.approach1000, telemetryAnalysis.approach500].map((check) => (
+            <div className={`approach-check ${check.stable === false ? 'approach-check--warning' : ''}`} key={check.targetFeet}>
+              <span>Passage {check.targetFeet.toLocaleString('fr-FR')} ft AGL</span>
+              <strong>{check.stable === null ? 'Données absentes' : check.stable ? 'Approche stabilisée' : 'Approche non stabilisée'}</strong>
+              {check.sample ? <small>{Math.round(check.sample.groundSpeedKt)} kt · {Math.round(check.sample.verticalSpeedFpm)} ft/min · inclinaison {check.sample.bankDegrees.toFixed(1)}°</small> : null}
+              {check.reasons.length > 0 ? <small>Points à surveiller : {check.reasons.join(', ')}</small> : null}
+            </div>
+          ))}
+        </div>
+
+        {telemetryChartData.length > 1 ? (
+          <div className="pirep-chart-wrapper">
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={telemetryChartData} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                <XAxis dataKey="time" tick={{ fontSize: 11 }} stroke="var(--text-muted)" />
+                <YAxis yAxisId="altitude" tick={{ fontSize: 11 }} stroke="var(--text-muted)" width={60} />
+                <YAxis yAxisId="other" orientation="right" tick={{ fontSize: 11 }} stroke="var(--text-muted)" width={55} />
+                <RechartsTooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line yAxisId="altitude" type="monotone" dataKey="altitude" name="Altitude (ft)" stroke="#4d8bff" dot={false} />
+                <Line yAxisId="other" type="monotone" dataKey="speed" name="Vitesse sol (kt)" stroke="#2fb170" dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : <p className="empty-hint">Profil complet disponible à partir des vols enregistrés avec le nouvel enregistreur.</p>}
+      </section>
+
+      <section className="pirep-detail-section">
+        <h3>Indicateurs du vol</h3>
+        <StatGrid items={[
+          { key: 'punctuality-score', label: 'Ponctualité', value: formatScore(scorePunctuality(pirep.delayMinutes)) },
+          { key: 'fuel-score', label: 'Gestion carburant', value: formatScore(scoreFuel(actualFuelUsed, plannedFuelUsed)) },
+          { key: 'comfort-score', label: 'Confort', value: formatScore(scoreComfort(pirep.touchdownGForce, warningEvents.length)) },
+          { key: 'landing-score', label: 'Atterrissage', value: formatScore(scoreLanding(pirep.touchdownVerticalSpeedFpm)) }
+        ]} />
+        <div className="pirep-anomalies">
+          <strong>Anomalies détectées</strong>
+          {warningEvents.length === 0 ? <span>Aucune anomalie enregistrée.</span> : (
+            <ul>{warningEvents.map((event, index) => <li key={`${event.simTimeIso}-${index}`}>{event.message}</li>)}</ul>
+          )}
+        </div>
       </section>
 
       <section className="pirep-detail-section">
@@ -260,6 +343,20 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
           <p>{pirep.remarks}</p>
         </section>
       ) : null}
+    </div>
+  )
+}
+
+function formatScore(score: number | null): string {
+  return score === null ? '—' : `${score}/100`
+}
+
+function Comparison({ label, planned, actual }: { label: string; planned: string; actual: string }) {
+  return (
+    <div className="pirep-comparison-card">
+      <strong>{label}</strong>
+      <span><small>Prévu</small>{planned}</span>
+      <span><small>Réalisé</small>{actual}</span>
     </div>
   )
 }

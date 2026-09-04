@@ -25,6 +25,16 @@ export interface AircraftWithStats extends Aircraft {
   lastKnownIcao: string | null
   /** Heure d'arrivée (simTime UTC) de ce dernier atterrissage connu. */
   lastKnownAt: string | null
+  /** Un cycle correspond à un vol terminé enregistré dans les PIREPs. */
+  cycleCount: number
+  averageLandingFpm: number | null
+  /** Consommation moyenne entre le premier démarrage et la coupure du dernier moteur. */
+  averageFuelConsumptionKg: number | null
+  /** Distance moyenne réellement parcourue, en milles nautiques. */
+  averageDistanceNm: number | null
+  /** Aéroport d'arrivée le plus fréquent pour cet avion. */
+  mostVisitedIcao: string | null
+  mostVisitedCount: number
 }
 
 export interface AircraftInput {

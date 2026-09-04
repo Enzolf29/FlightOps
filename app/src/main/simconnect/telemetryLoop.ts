@@ -44,6 +44,7 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
   // point de référence du modèle 3D de l'avion (souvent au niveau du fuselage), pas les roues —
   // elle affiche donc toujours plus que l'altitude réelle de l'aéroport une fois au sol.
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'INDICATED ALTITUDE', 'feet', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'PLANE ALT ABOVE GROUND', 'feet', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'PLANE HEADING DEGREES TRUE', 'degrees', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'PLANE BANK DEGREES', 'degrees', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'PLANE PITCH DEGREES', 'degrees', SimConnectDataType.FLOAT64)
@@ -68,6 +69,15 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'LIGHT NAV', 'bool', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'LIGHT WING', 'bool', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'LIGHT LOGO', 'bool', SimConnectDataType.FLOAT64)
+  // États documentés par GSX : 5 = service en cours, 6 = terminé. Les L:vars absentes valent 0,
+  // l'app continue donc de fonctionner normalement lorsque GSX n'est pas installé ou pas lancé.
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_BOARDING_STATE', 'number', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_DEPARTURE_STATE', 'number', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_NUMPASSENGERS', 'number', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_NUMPASSENGERS_BOARDING_TOTAL', 'number', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_BOARDING_CARGO_PERCENT', 'percent', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_VAR_Frozen', 'bool', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'TIME OF DAY', 'enum', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'AIRSPEED INDICATED', 'knots', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'GROUND VELOCITY', 'knots', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'VERTICAL SPEED', 'feet per minute', SimConnectDataType.FLOAT64)
@@ -87,6 +97,12 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
   // valeurs standards que si le titre de l'appareil indique un A220.
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:A22X Flap Lever', 'number', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'FUEL TOTAL QUANTITY WEIGHT', 'kilograms', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'TOTAL WEIGHT', 'kilograms', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'EMPTY WEIGHT', 'kilograms', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'MAX GROSS WEIGHT', 'kilograms', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'MAX ZERO FUEL WEIGHT', 'kilograms', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'MAX TAKEOFF WEIGHT', 'kilograms', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'MAX LANDING WEIGHT', 'kilograms', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'TITLE', null, SimConnectDataType.STRING256)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'ATC ID', null, SimConnectDataType.STRING64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'ZULU TIME', 'seconds', SimConnectDataType.FLOAT64)
@@ -109,6 +125,7 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
     const latitude = data.readFloat64()
     const longitude = data.readFloat64()
     const altitude = data.readFloat64()
+    const altitudeAboveGround = data.readFloat64()
     const headingTrue = data.readFloat64()
     const bankDegrees = data.readFloat64()
     const pitchDegrees = data.readFloat64()
@@ -128,6 +145,13 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
     const navLightsOn = data.readFloat64() >= 0.5
     const wingLightsOn = data.readFloat64() >= 0.5
     const logoLightsOn = data.readFloat64() >= 0.5
+    const gsxBoardingState = Math.round(data.readFloat64())
+    const gsxDepartureState = Math.round(data.readFloat64())
+    const gsxPassengersTarget = Math.round(data.readFloat64())
+    const gsxPassengersBoardedTotal = Math.round(data.readFloat64())
+    const gsxCargoBoardingPercent = data.readFloat64()
+    const gsxPushbackFrozen = data.readFloat64() >= 0.5
+    const timeOfDay = Math.round(data.readFloat64())
     const airspeedIndicated = data.readFloat64()
     const groundVelocity = data.readFloat64()
     const verticalSpeed = data.readFloat64()
@@ -139,6 +163,12 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
     const flapsNumHandlePositions = data.readFloat64()
     const a22xFlapLever = data.readFloat64()
     const fuelTotalWeight = data.readFloat64()
+    const totalWeightKg = data.readFloat64()
+    const emptyWeightKg = data.readFloat64()
+    const maxGrossWeightKg = data.readFloat64()
+    const maxZeroFuelWeightKg = data.readFloat64()
+    const maxTakeoffWeightKg = data.readFloat64()
+    const maxLandingWeightKg = data.readFloat64()
     const title = data.readString256()
     const atcId = data.readString64()
     const zuluSeconds = data.readFloat64()
@@ -160,6 +190,7 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
       latitude,
       longitude,
       altitude,
+      altitudeAboveGround,
       headingTrue,
       bankDegrees,
       pitchDegrees,
@@ -176,6 +207,13 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
       navLightsOn,
       wingLightsOn,
       logoLightsOn,
+      gsxBoardingState,
+      gsxDepartureState,
+      gsxPassengersTarget,
+      gsxPassengersBoardedTotal,
+      gsxCargoBoardingPercent,
+      gsxPushbackFrozen,
+      timeOfDay,
       airspeedIndicated,
       groundVelocity,
       verticalSpeed,
@@ -186,9 +224,23 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
       flapsHandleIndex: Math.round(effectiveFlapsHandleIndex),
       flapsNumHandlePositions: Math.round(effectiveFlapsNumHandlePositions),
       fuelTotalWeight,
+      totalWeightKg,
+      emptyWeightKg,
+      maxGrossWeightKg,
+      maxZeroFuelWeightKg,
+      maxTakeoffWeightKg,
+      maxLandingWeightKg,
       title,
       atcId,
       simZuluIso: new Date(Date.UTC(zuluYear, zuluMonth - 1, zuluDay, 0, 0, zuluSeconds)).toISOString()
+      ,diagnostics: {
+        combustion: [combustion1, combustion2, combustion3, combustion4],
+        n1Percent: [n1_1, n1_2, n1_3, n1_4],
+        standardFlapsPercent: flapsPercent,
+        standardFlapsHandleIndex: flapsHandleIndex,
+        standardFlapsPositions: flapsNumHandlePositions,
+        a220FlapLever: a22xFlapLever
+      }
     })
   }
 

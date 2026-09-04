@@ -39,3 +39,23 @@ export interface PirepApproachProfilePoint {
   altitudeFeet: number
   groundSpeedKt: number
 }
+
+export interface PirepTelemetrySample {
+  timeIso: string
+  latitude: number
+  longitude: number
+  altitudeFeet: number
+  altitudeAglFeet: number
+  headingTrue: number
+  indicatedAirspeedKt: number
+  groundSpeedKt: number
+  verticalSpeedFpm: number
+  fuelKg: number
+  onGround: boolean
+  phase: string
+  bankDegrees: number
+  pitchDegrees: number
+  gearDown: boolean
+  flapsIndex: number
+  landingLightsOn: boolean
+}

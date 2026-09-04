@@ -15,9 +15,22 @@ import type { FlightEvent, FlightEventFlags } from '@shared/flightStatus/evaluat
 import type { SimTelemetry } from '@shared/types/simconnect'
 import type { PirepFlightPathPoint, PirepApproachProfilePoint } from '@shared/types/pirep'
 import type { LandingPrecisionSample } from './landingPrecisionLoop'
+import { isPlausibleMovement } from '@shared/flightStatus/isPlausibleMovement'
+import {
+  countTelemetrySamples,
+  deleteFlightSession,
+  insertTelemetrySample,
+  loadLatestFlightSession,
+  markFlightSessionRecovered,
+  saveFlightSession
+} from '../db/repositories/flightRecorderRepository'
+import type { FlightRecorderStatus } from '@shared/types/simconnect'
 
 const MAX_EVENTS = 300
 const MAX_FLIGHT_PATH_POINTS = 20_000
+const NORMAL_SAVE_INTERVAL_MS = 5_000
+const APPROACH_SAVE_INTERVAL_MS = 1_000
+const APPROACH_AGL_FEET = 5_000
 
 interface TouchdownStats {
   verticalSpeedFpm: number
@@ -31,6 +44,13 @@ let armedFlightId: number | null = null
 let tickState: DetectorTickState | null = null
 let actualDepartureIso: string | null = null
 let lastTelemetry: SimTelemetry | null = null
+let sessionStartedAt: string | null = null
+let lastPersistedAtMs = 0
+let sampleCount = 0
+let recoveredSession = false
+let recorderError: string | null = null
+let awaitingEngineShutdown = false
+const recorderListeners = new Set<(status: FlightRecorderStatus) => void>()
 
 let previousTelemetry: SimTelemetry | null = null
 let eventFlags: FlightEventFlags = INITIAL_FLIGHT_EVENT_FLAGS
@@ -69,6 +89,145 @@ let pendingCaptureWasEnginesRunning = true
  * au parking, avant que le pilote coupe réellement les moteurs) ne sont jamais détectées. */
 let pendingEngineStates: Record<string, boolean> | null = null
 let pendingEngineEvents: FlightEvent[] = []
+
+interface PersistedDetectorState {
+  tickState: DetectorTickState
+  actualDepartureIso: string | null
+  previousTelemetry: SimTelemetry | null
+  eventFlags: FlightEventFlags
+  events: FlightEvent[]
+  plannedCruiseAltitudeFeet: number | null
+  engineStartIso: string | null
+  engineStopIso: string | null
+  fuelAtEngineStartKg: number | null
+  fuelAtTakeoffKg: number | null
+  fuelAtTouchdownKg: number | null
+  fuelAtEngineStopKg: number | null
+  lastLandingSimTimeIso: string | null
+  flightPath: PirepFlightPathPoint[]
+  approachProfile: PirepApproachProfilePoint[]
+  landingPrecisionArmed: boolean
+  touchdownStats: TouchdownStats | null
+  awaitingEngineShutdown: boolean
+}
+
+function recorderStatus(): FlightRecorderStatus {
+  const state = recorderError ? 'error' : armedFlightId === null ? 'idle' : recoveredSession ? 'recovered' : 'recording'
+  return {
+    state,
+    flightId: armedFlightId,
+    lastSavedAt: lastPersistedAtMs > 0 ? new Date(lastPersistedAtMs).toISOString() : null,
+    sampleCount,
+    message: recorderError
+      ? recorderError
+      : armedFlightId === null
+        ? 'Aucun vol en cours d’enregistrement'
+        : recoveredSession
+          ? 'Session récupérée — enregistrement actif'
+          : 'Enregistrement actif'
+  }
+}
+
+function notifyRecorderStatus(): void {
+  const status = recorderStatus()
+  for (const listener of recorderListeners) listener(status)
+}
+
+export function getFlightRecorderStatus(): FlightRecorderStatus {
+  return recorderStatus()
+}
+
+export function onFlightRecorderStatus(listener: (status: FlightRecorderStatus) => void): () => void {
+  recorderListeners.add(listener)
+  return () => recorderListeners.delete(listener)
+}
+
+function persistedState(): PersistedDetectorState | null {
+  if (!tickState) return null
+  return {
+    tickState,
+    actualDepartureIso,
+    previousTelemetry,
+    eventFlags,
+    events,
+    plannedCruiseAltitudeFeet,
+    engineStartIso,
+    engineStopIso,
+    fuelAtEngineStartKg,
+    fuelAtTakeoffKg,
+    fuelAtTouchdownKg,
+    fuelAtEngineStopKg,
+    lastLandingSimTimeIso,
+    flightPath,
+    approachProfile,
+    landingPrecisionArmed,
+    touchdownStats,
+    awaitingEngineShutdown
+  }
+}
+
+function persistFlightSession(telemetry: SimTelemetry, force = false): void {
+  if (armedFlightId === null || !sessionStartedAt) return
+  const now = Date.now()
+  const inApproach = !telemetry.onGround && (telemetry.altitudeAboveGround ?? Infinity) <= APPROACH_AGL_FEET
+  const interval = inApproach ? APPROACH_SAVE_INTERVAL_MS : NORMAL_SAVE_INTERVAL_MS
+  if (!force && now - lastPersistedAtMs < interval) return
+
+  const state = persistedState()
+  if (!state) return
+  try {
+    saveFlightSession(armedFlightId, state, sessionStartedAt, telemetry.simZuluIso)
+    insertTelemetrySample(armedFlightId, telemetry, eventFlags.flightPhase)
+    sampleCount += 1
+    lastPersistedAtMs = now
+    recorderError = null
+    notifyRecorderStatus()
+  } catch (error) {
+    recorderError = error instanceof Error ? error.message : 'Échec de la sauvegarde du vol'
+    notifyRecorderStatus()
+  }
+}
+
+export function recoverFlightSession(): void {
+  const stored = loadLatestFlightSession()
+  if (!stored) return
+  try {
+    const state = JSON.parse(stored.stateJson) as PersistedDetectorState
+    armedFlightId = stored.flightId
+    tickState = state.tickState
+    actualDepartureIso = state.actualDepartureIso
+    previousTelemetry = state.previousTelemetry
+    eventFlags = state.eventFlags
+    events = state.events ?? []
+    plannedCruiseAltitudeFeet = state.plannedCruiseAltitudeFeet
+    engineStartIso = state.engineStartIso
+    engineStopIso = state.engineStopIso
+    fuelAtEngineStartKg = state.fuelAtEngineStartKg
+    fuelAtTakeoffKg = state.fuelAtTakeoffKg
+    fuelAtTouchdownKg = state.fuelAtTouchdownKg
+    fuelAtEngineStopKg = state.fuelAtEngineStopKg
+    lastLandingSimTimeIso = state.lastLandingSimTimeIso
+    flightPath = state.flightPath ?? []
+    approachProfile = state.approachProfile ?? []
+    landingPrecisionArmed = state.landingPrecisionArmed
+    touchdownStats = state.touchdownStats
+    awaitingEngineShutdown = state.awaitingEngineShutdown ?? false
+    sessionStartedAt = stored.startedAt
+    sampleCount = countTelemetrySamples(stored.flightId)
+    recoveredSession = true
+    lastPersistedAtMs = Date.now()
+    markFlightSessionRecovered(stored.flightId)
+    notifyRecorderStatus()
+  } catch (error) {
+    recorderError = error instanceof Error ? error.message : 'Session de vol illisible'
+    notifyRecorderStatus()
+  }
+}
+
+/** Force la dernière sauvegarde avant fermeture normale de l'application. */
+export function flushFlightRecorder(): void {
+  if (lastTelemetry) persistFlightSession(lastTelemetry, true)
+}
 
 function snapshotEngineStates(telemetry: SimTelemetry): Record<string, boolean> {
   const snapshot: Record<string, boolean> = {}
@@ -112,12 +271,25 @@ export function armFlight(flightId: number): void {
   previousLandingSample = null
   landingPrecisionArmed = isResuming
   touchdownStats = null
+  awaitingEngineShutdown = false
+  sessionStartedAt = new Date().toISOString()
+  lastPersistedAtMs = 0
+  sampleCount = 0
+  recoveredSession = false
+  recorderError = null
+  notifyRecorderStatus()
 }
 
 export function disarmFlight(): void {
+  const flightId = armedFlightId
   armedFlightId = null
   tickState = null
   actualDepartureIso = null
+  awaitingEngineShutdown = false
+  sessionStartedAt = null
+  recoveredSession = false
+  if (flightId !== null) deleteFlightSession(flightId)
+  notifyRecorderStatus()
 }
 
 export function getArmedFlightId(): number | null {
@@ -151,6 +323,10 @@ function pushEvent(event: FlightEvent): void {
 }
 
 export function handleTelemetryTick(telemetry: SimTelemetry): void {
+  // SimConnect reste connecté et peut continuer à publier des valeurs anciennes/transitoires dans
+  // les menus MSFS. Ces ticks ne doivent ni créer d'évènement, ni arrêter un moteur, ni alimenter
+  // les tendances opérationnelles d'un vol récupéré.
+  if (telemetry.simulationActive === false) return
   lastTelemetry = telemetry
 
   // Capture "en attente" d'une coupure moteur survenue après la clôture d'un vol précédent —
@@ -238,7 +414,8 @@ export function handleTelemetryTick(telemetry: SimTelemetry): void {
     fuelAtEngineStopKg = telemetry.fuelTotalWeight
   }
 
-  const { events: newEvents, nextFlags } = evaluateFlightEvents(previousTelemetry, telemetry, eventFlags, plannedCruiseAltitudeFeet)
+  const telemetryBeforeTick = previousTelemetry
+  const { events: newEvents, nextFlags } = evaluateFlightEvents(telemetryBeforeTick, telemetry, eventFlags, plannedCruiseAltitudeFeet)
   eventFlags = nextFlags
   previousTelemetry = telemetry
   for (const event of newEvents) {
@@ -270,7 +447,13 @@ export function handleTelemetryTick(telemetry: SimTelemetry): void {
     }
   }
 
-  if (flightPath.length < MAX_FLIGHT_PATH_POINTS) {
+  if (awaitingEngineShutdown && !telemetry.enginesRunning) {
+    completeArmedFlight(telemetry.simZuluIso)
+    return
+  }
+
+  const previousPoint = telemetryBeforeTick
+  if (flightPath.length < MAX_FLIGHT_PATH_POINTS && isPlausibleMovement(previousPoint, telemetry)) {
     flightPath.push({ lat: telemetry.latitude, lon: telemetry.longitude })
   }
   if (eventFlags.flightPhase === 'descent') {
@@ -300,8 +483,14 @@ export function handleTelemetryTick(telemetry: SimTelemetry): void {
         })
       }
     }
-    completeArmedFlight(telemetry.simZuluIso)
+    awaitingEngineShutdown = true
+    if (!telemetry.enginesRunning) {
+      completeArmedFlight(telemetry.simZuluIso)
+      return
+    }
   }
+
+  persistFlightSession(telemetry, newEvents.length > 0 || transition !== 'none')
 }
 
 /** Flux SimConnect haute fréquence dédié à la précision du toucher des roues (voir landingPrecisionLoop). */
@@ -321,7 +510,10 @@ export function handleLandingPrecisionTick(sample: LandingPrecisionSample): void
         ? (new Date(lastTelemetry.simZuluIso).getTime() - new Date(eventFlags.takeoffSimTimeIso).getTime()) / 1000
         : null
 
-    if (secondsSinceTakeoff === null || secondsSinceTakeoff >= MINIMUM_FLIGHT_DURATION_SECONDS) {
+    if (
+      (secondsSinceTakeoff === null || secondsSinceTakeoff >= MINIMUM_FLIGHT_DURATION_SECONDS) &&
+      (eventFlags.airborneQualified || eventFlags.takeoffSimTimeIso === null)
+    ) {
       touchdownStats = {
         verticalSpeedFpm: previousLandingSample.verticalSpeed,
         gForce: previousLandingSample.gForce,

@@ -1,5 +1,7 @@
 import { getDb } from '../index'
 import type { Aircraft, AircraftInput, AircraftPatch, AircraftWithStats } from '@shared/types/aircraft'
+import { greatCircleDistanceNm } from '@shared/flightStatus/computeFlightDistanceProgress'
+import { getAirportCoordinates } from '@shared/airports/airportCoordinates'
 
 interface AircraftStatsRow {
   id: number
@@ -17,6 +19,10 @@ interface AircraftStatsRow {
   total_minutes: number
   last_known_icao: string | null
   last_known_at: string | null
+  average_landing_fpm: number | null
+  average_fuel_consumption_kg: number | null
+  most_visited_icao: string | null
+  most_visited_count: number
 }
 
 // Position connue = aéroport d'arrivée du PIREP le plus récent de cet avion (l'avion "reste" là où
@@ -28,6 +34,14 @@ const SELECT_WITH_STATS = `
     c.icao_code AS company_icao_code, c.display_name AS company_display_name, c.logo_filename AS company_logo_filename,
     COUNT(p.id) AS flight_count,
     COALESCE(SUM(p.flight_time_minutes), 0) AS total_minutes,
+    AVG(p.touchdown_vertical_speed_fpm) AS average_landing_fpm,
+    AVG(
+      CASE
+        WHEN p.fuel_at_engine_start_kg IS NOT NULL AND p.fuel_at_engine_stop_kg IS NOT NULL
+          AND p.fuel_at_engine_start_kg >= p.fuel_at_engine_stop_kg
+        THEN p.fuel_at_engine_start_kg - p.fuel_at_engine_stop_kg
+      END
+    ) AS average_fuel_consumption_kg,
     (
       SELECT lf.arrival_icao FROM pireps lp
       JOIN flights lf ON lf.id = lp.flight_id
@@ -40,11 +54,64 @@ const SELECT_WITH_STATS = `
       WHERE lf.aircraft_id = a.id
       ORDER BY lp.actual_arrival_time DESC LIMIT 1
     ) AS last_known_at
+    ,(
+      SELECT vf.arrival_icao FROM pireps vp
+      JOIN flights vf ON vf.id = vp.flight_id
+      WHERE vf.aircraft_id = a.id
+      GROUP BY vf.arrival_icao
+      ORDER BY COUNT(*) DESC, MAX(vp.actual_arrival_time) DESC
+      LIMIT 1
+    ) AS most_visited_icao
+    ,COALESCE((
+      SELECT COUNT(*) FROM pireps vp
+      JOIN flights vf ON vf.id = vp.flight_id
+      WHERE vf.aircraft_id = a.id
+        AND vf.arrival_icao = (
+          SELECT vf2.arrival_icao FROM pireps vp2
+          JOIN flights vf2 ON vf2.id = vp2.flight_id
+          WHERE vf2.aircraft_id = a.id
+          GROUP BY vf2.arrival_icao
+          ORDER BY COUNT(*) DESC, MAX(vp2.actual_arrival_time) DESC
+          LIMIT 1
+        )
+    ), 0) AS most_visited_count
   FROM aircraft a
   JOIN companies c ON c.id = a.company_id
   LEFT JOIN flights f ON f.aircraft_id = a.id
   LEFT JOIN pireps p ON p.flight_id = f.id
 `
+
+function computeAverageDistanceNm(aircraftId: number): number | null {
+  const rows = getDb()
+    .prepare(
+      `SELECT p.flight_path_json, f.departure_icao, f.arrival_icao
+       FROM pireps p JOIN flights f ON f.id = p.flight_id
+       WHERE f.aircraft_id = ?`
+    )
+    .all(aircraftId) as Array<{ flight_path_json: string | null; departure_icao: string; arrival_icao: string }>
+
+  const distances: number[] = []
+  for (const row of rows) {
+    let distance = 0
+    if (row.flight_path_json) {
+      try {
+        const path = JSON.parse(row.flight_path_json) as Array<{ lat: number; lon: number }>
+        for (let index = 1; index < path.length; index += 1) {
+          distance += greatCircleDistanceNm(path[index - 1].lat, path[index - 1].lon, path[index].lat, path[index].lon)
+        }
+      } catch {
+        distance = 0
+      }
+    }
+    if (distance <= 0) {
+      const departure = getAirportCoordinates(row.departure_icao)
+      const arrival = getAirportCoordinates(row.arrival_icao)
+      if (departure && arrival) distance = greatCircleDistanceNm(departure.lat, departure.lon, arrival.lat, arrival.lon)
+    }
+    if (distance > 0 && Number.isFinite(distance)) distances.push(distance)
+  }
+  return distances.length > 0 ? distances.reduce((sum, distance) => sum + distance, 0) / distances.length : null
+}
 
 function mapAircraft(row: AircraftStatsRow): AircraftWithStats {
   return {
@@ -64,7 +131,13 @@ function mapAircraft(row: AircraftStatsRow): AircraftWithStats {
     flightCount: row.flight_count,
     cumulativeHours: row.total_minutes / 60,
     lastKnownIcao: row.last_known_icao,
-    lastKnownAt: row.last_known_at
+    lastKnownAt: row.last_known_at,
+    cycleCount: row.flight_count,
+    averageLandingFpm: row.average_landing_fpm,
+    averageFuelConsumptionKg: row.average_fuel_consumption_kg,
+    averageDistanceNm: computeAverageDistanceNm(row.id),
+    mostVisitedIcao: row.most_visited_icao,
+    mostVisitedCount: row.most_visited_count
   }
 }
 

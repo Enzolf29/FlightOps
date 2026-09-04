@@ -1,6 +1,6 @@
 import { getDb } from '../index'
 import type { Flight, FlightSource, FlightStatus } from '@shared/types/flight'
-import type { DelayBucket, PirepApproachProfilePoint, PirepFlightPathPoint, PirepWithFlight } from '@shared/types/pirep'
+import type { DelayBucket, PirepApproachProfilePoint, PirepFlightPathPoint, PirepTelemetrySample, PirepWithFlight } from '@shared/types/pirep'
 import type { FlightEvent } from '@shared/flightStatus/evaluateFlightEvents'
 
 interface PirepJoinRow {
@@ -174,6 +174,35 @@ export function getPirepEvents(id: number): FlightEvent[] {
   } catch {
     return []
   }
+}
+
+export function getPirepTelemetrySamples(id: number): PirepTelemetrySample[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT s.* FROM flight_telemetry_samples s
+       JOIN pireps p ON p.flight_id = s.flight_id
+       WHERE p.id = ? ORDER BY s.sim_time_iso ASC`
+    )
+    .all(id) as Array<Record<string, number | string>>
+  return rows.map((row) => ({
+    timeIso: String(row.sim_time_iso),
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude),
+    altitudeFeet: Number(row.altitude_feet),
+    altitudeAglFeet: Number(row.altitude_agl_feet),
+    headingTrue: Number(row.heading_true),
+    indicatedAirspeedKt: Number(row.indicated_airspeed_kt),
+    groundSpeedKt: Number(row.ground_speed_kt),
+    verticalSpeedFpm: Number(row.vertical_speed_fpm),
+    fuelKg: Number(row.fuel_kg),
+    onGround: Number(row.on_ground) === 1,
+    phase: String(row.phase),
+    bankDegrees: Number(row.bank_degrees),
+    pitchDegrees: Number(row.pitch_degrees),
+    gearDown: Number(row.gear_down) === 1,
+    flapsIndex: Number(row.flaps_index),
+    landingLightsOn: Number(row.landing_lights_on) === 1
+  }))
 }
 
 export interface CreatePirepInput {

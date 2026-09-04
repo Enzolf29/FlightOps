@@ -97,9 +97,10 @@ interface LiveMapProps {
   /** Trajectoire déjà accumulée côté main process pour ce vol — reprend le tracé là où il en était
    * plutôt que de repartir de zéro en revenant sur cette page après l'avoir quittée. */
   initialTrail?: LatLon[]
+  replayPosition?: { lat: number; lon: number; headingTrue: number; label: string } | null
 }
 
-export function LiveMap({ resetKey, origin, destination, alternate, navlog, telemetry, staticTrail, initialTrail }: LiveMapProps) {
+export function LiveMap({ resetKey, origin, destination, alternate, navlog, telemetry, staticTrail, initialTrail, replayPosition }: LiveMapProps) {
   const [liveTrail, setLiveTrail] = useState<LatLon[]>([])
   const trailResetKey = useRef<string | number | null>(resetKey)
   const seededFromInitial = useRef(false)
@@ -133,7 +134,13 @@ export function LiveMap({ resetKey, origin, destination, alternate, navlog, tele
 
   const routePositions = useMemo(() => buildRoutePositions(origin, destination, navlog), [origin, destination, navlog])
 
-  const aircraftPosition: LatLon | null = telemetry ? [telemetry.latitude, telemetry.longitude] : null
+  const aircraftPosition: LatLon | null = telemetry
+    ? [telemetry.latitude, telemetry.longitude]
+    : replayPosition
+      ? [replayPosition.lat, replayPosition.lon]
+      : null
+  const aircraftHeading = telemetry?.headingTrue ?? replayPosition?.headingTrue ?? 0
+  const aircraftLabel = telemetry?.atcId || telemetry?.title || replayPosition?.label || ''
 
   const boundsPoints = useMemo(() => {
     const points: LatLon[] = []
@@ -180,8 +187,8 @@ export function LiveMap({ resetKey, origin, destination, alternate, navlog, tele
           </Marker>
         ) : null}
         {aircraftPosition ? (
-          <Marker position={aircraftPosition} icon={aircraftIcon(telemetry?.headingTrue ?? 0)}>
-            <Tooltip direction="top">{telemetry?.atcId || telemetry?.title}</Tooltip>
+          <Marker position={aircraftPosition} icon={aircraftIcon(aircraftHeading)}>
+            <Tooltip direction="top">{aircraftLabel}</Tooltip>
           </Marker>
         ) : null}
       </MapContainer>

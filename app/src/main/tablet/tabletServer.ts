@@ -1,0 +1,313 @@
+import { randomInt } from 'crypto'
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
+import { networkInterfaces } from 'os'
+import type { AddressInfo } from 'net'
+import { CABIN_ANNOUNCEMENT_TYPES, isCabinAnnouncementType } from '@shared/types/cabinAnnouncements'
+import type {
+  TabletCabinCommand,
+  TabletCabinStatus,
+  TabletServerInfo,
+  TabletSnapshot
+} from '@shared/types/tablet'
+import type { SimTelemetry } from '@shared/types/simconnect'
+import { getAllFlights, getFlightWithRelationsById } from '../db/repositories/flightRepository'
+import { getStatus, onStatusChange, onTelemetry } from '../simconnect/connectionManager'
+import { requestMetar } from '../simconnect/metarClient'
+import {
+  armFlight,
+  disarmFlight,
+  getArmedFlightId,
+  getFlightEvents,
+  getLiveFlightPath,
+  onFlightEvent
+} from '../simconnect/flightStatusDetector'
+import { TABLET_PAGE_HTML } from './tabletPage'
+
+const PREFERRED_PORT = 8732
+const MAX_BODY_BYTES = 16_384
+const MAX_TABLET_PATH_POINTS = 800
+
+type CabinCommandListener = (command: TabletCabinCommand) => void
+
+let server: Server | null = null
+let port: number | null = null
+let pin = String(randomInt(100_000, 1_000_000))
+let latestTelemetry: SimTelemetry | null = null
+let heartbeat: ReturnType<typeof setInterval> | null = null
+let unsubscribers: Array<() => void> = []
+let cabinStatus: TabletCabinStatus = {
+  company: null,
+  automationReady: false,
+  gsxDetected: false,
+  activeVoice: null,
+  activeMusic: null,
+  queuedTypes: [],
+  availableTypes: []
+}
+
+const streamClients = new Set<ServerResponse>()
+const cabinCommandListeners = new Set<CabinCommandListener>()
+
+function localAddresses(): string[] {
+  if (port === null) return []
+  const addresses = new Set<string>()
+  for (const entries of Object.values(networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (entry.family === 'IPv4' && !entry.internal) addresses.add(`http://${entry.address}:${port}`)
+    }
+  }
+  return [...addresses]
+}
+
+export function getTabletServerInfo(): TabletServerInfo {
+  return {
+    running: server?.listening === true,
+    port,
+    pin,
+    urls: localAddresses(),
+    connectedClients: streamClients.size
+  }
+}
+
+function downsamplePath<T>(points: T[]): T[] {
+  if (points.length <= MAX_TABLET_PATH_POINTS) return [...points]
+  const step = Math.ceil(points.length / MAX_TABLET_PATH_POINTS)
+  const sampled = points.filter((_, index) => index % step === 0)
+  const last = points.at(-1)
+  if (last && sampled.at(-1) !== last) sampled.push(last)
+  return sampled
+}
+
+function buildSnapshot(): TabletSnapshot {
+  const armedFlightId = getArmedFlightId()
+  const availableFlights = getAllFlights().filter(
+    (flight) => flight.status === 'upcoming' || flight.status === 'in_progress'
+  )
+  const telemetry = latestTelemetry
+    ? (({ diagnostics: _diagnostics, ...safeTelemetry }) => safeTelemetry)(latestTelemetry)
+    : null
+
+  return {
+    generatedAt: new Date().toISOString(),
+    simconnectStatus: getStatus(),
+    armedFlightId,
+    flight: armedFlightId === null ? null : getFlightWithRelationsById(armedFlightId),
+    availableFlights,
+    telemetry,
+    events: getFlightEvents().filter((event) => event.type !== 'operational_alert'),
+    path: downsamplePath(getLiveFlightPath()),
+    cabin: cabinStatus
+  }
+}
+
+function sendJson(response: ServerResponse, status: number, payload: unknown): void {
+  response.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff'
+  })
+  response.end(JSON.stringify(payload))
+}
+
+function isAuthorized(url: URL): boolean {
+  return url.searchParams.get('pin') === pin
+}
+
+async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let size = 0
+    request.on('data', (chunk: Buffer) => {
+      size += chunk.length
+      if (size > MAX_BODY_BYTES) {
+        reject(new Error('Requête trop volumineuse.'))
+        request.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
+    request.on('end', () => {
+      try {
+        resolve(chunks.length === 0 ? {} : JSON.parse(Buffer.concat(chunks).toString('utf8')))
+      } catch {
+        reject(new Error('Requête invalide.'))
+      }
+    })
+    request.on('error', reject)
+  })
+}
+
+function pushSnapshot(response: ServerResponse): void {
+  try {
+    response.write(`data: ${JSON.stringify(buildSnapshot())}\n\n`)
+  } catch {
+    streamClients.delete(response)
+  }
+}
+
+function broadcastSnapshot(): void {
+  for (const client of streamClients) pushSnapshot(client)
+}
+
+async function handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const requestUrl = new URL(request.url ?? '/', 'http://flightops.local')
+
+  if (request.method === 'GET' && requestUrl.pathname === '/') {
+    response.writeHead(200, {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store',
+      'content-security-policy': "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
+    })
+    response.end(TABLET_PAGE_HTML)
+    return
+  }
+
+  if (!isAuthorized(requestUrl)) {
+    sendJson(response, 401, { error: 'Code d’appairage incorrect.' })
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/snapshot') {
+    sendJson(response, 200, buildSnapshot())
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/stream') {
+    response.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-cache, no-transform',
+      connection: 'keep-alive',
+      'x-accel-buffering': 'no'
+    })
+    response.write(': FlightOps tablette\n\n')
+    streamClients.add(response)
+    pushSnapshot(response)
+    request.on('close', () => streamClients.delete(response))
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/metar') {
+    const icao = (requestUrl.searchParams.get('icao') ?? '').trim().toUpperCase()
+    if (!/^[A-Z0-9]{4}$/.test(icao)) {
+      sendJson(response, 400, { error: 'Code OACI invalide.' })
+      return
+    }
+    try {
+      sendJson(response, 200, { icao, metar: await requestMetar(icao) })
+    } catch (error) {
+      sendJson(response, 502, { error: error instanceof Error ? error.message : 'METAR indisponible.' })
+    }
+    return
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/tracking/arm') {
+    const body = await readJson(request)
+    const flightId = Number(body.flightId)
+    const flight = Number.isInteger(flightId) ? getFlightWithRelationsById(flightId) : null
+    if (!flight || (flight.status !== 'upcoming' && flight.status !== 'in_progress')) {
+      sendJson(response, 400, { error: 'Ce vol ne peut pas être suivi.' })
+      return
+    }
+    armFlight(flightId)
+    broadcastSnapshot()
+    sendJson(response, 200, { ok: true })
+    return
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/tracking/disarm') {
+    disarmFlight()
+    broadcastSnapshot()
+    sendJson(response, 200, { ok: true })
+    return
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/cabin') {
+    const body = await readJson(request)
+    let command: TabletCabinCommand | null = null
+    if (body.action === 'stop_all') command = { action: 'stop_all' }
+    else if ((body.action === 'play' || body.action === 'stop') && isCabinAnnouncementType(String(body.type))) {
+      command = { action: body.action, type: String(body.type) as (typeof CABIN_ANNOUNCEMENT_TYPES)[number] }
+    }
+    if (!command) {
+      sendJson(response, 400, { error: 'Commande d’annonce invalide.' })
+      return
+    }
+    for (const listener of cabinCommandListeners) listener(command)
+    sendJson(response, 200, { ok: true })
+    return
+  }
+
+  sendJson(response, 404, { error: 'Page introuvable.' })
+}
+
+function listen(tabletServer: Server, requestedPort: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const handleError = (error: NodeJS.ErrnoException): void => {
+      tabletServer.removeListener('listening', handleListening)
+      reject(error)
+    }
+    const handleListening = (): void => {
+      tabletServer.removeListener('error', handleError)
+      resolve((tabletServer.address() as AddressInfo).port)
+    }
+    tabletServer.once('error', handleError)
+    tabletServer.once('listening', handleListening)
+    tabletServer.listen(requestedPort, '0.0.0.0')
+  })
+}
+
+export async function startTabletServer(): Promise<void> {
+  if (server) return
+  pin = String(randomInt(100_000, 1_000_000))
+  const requestHandler = (request: IncomingMessage, response: ServerResponse): void => {
+    void handleRequest(request, response).catch((error) => {
+      if (!response.headersSent) {
+        sendJson(response, 500, { error: error instanceof Error ? error.message : 'Erreur interne.' })
+      } else response.end()
+    })
+  }
+
+  let candidate = createServer(requestHandler)
+  try {
+    port = await listen(candidate, PREFERRED_PORT)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error
+    candidate.close()
+    candidate = createServer(requestHandler)
+    port = await listen(candidate, 0)
+  }
+  server = candidate
+
+  unsubscribers = [
+    onTelemetry((telemetry) => {
+      latestTelemetry = telemetry
+      broadcastSnapshot()
+    }),
+    onStatusChange(() => broadcastSnapshot()),
+    onFlightEvent(() => broadcastSnapshot())
+  ]
+  heartbeat = setInterval(broadcastSnapshot, 15_000)
+}
+
+export function stopTabletServer(): void {
+  for (const unsubscribe of unsubscribers) unsubscribe()
+  unsubscribers = []
+  if (heartbeat) clearInterval(heartbeat)
+  heartbeat = null
+  for (const client of streamClients) client.end()
+  streamClients.clear()
+  server?.close()
+  server = null
+  port = null
+  latestTelemetry = null
+}
+
+export function publishTabletCabinStatus(status: TabletCabinStatus): void {
+  cabinStatus = status
+  broadcastSnapshot()
+}
+
+export function onTabletCabinCommand(listener: CabinCommandListener): () => void {
+  cabinCommandListeners.add(listener)
+  return () => cabinCommandListeners.delete(listener)
+}

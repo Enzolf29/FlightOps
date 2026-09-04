@@ -3,6 +3,9 @@ dist/
 out/
 *.log
 .DS_Store
+.claude/
+app/.smoke-*/
+test.html.txt
 
 # Runtime SQLite data and ad-hoc DB corruption-recovery artifacts (not source, may contain real pilot/flight data)
 db-backup-*/

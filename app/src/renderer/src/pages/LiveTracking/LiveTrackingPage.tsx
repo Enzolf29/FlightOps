@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useSimConnectStatus, useSimTelemetry } from '@renderer/hooks/useSimConnect'
+import { useFlightRecorderStatus, useSimConnectStatus, useSimTelemetry } from '@renderer/hooks/useSimConnect'
 import {
   useArmedFlightId,
   useArmFlight,
@@ -18,6 +18,8 @@ import { LiveMap } from '@renderer/components/LiveMap'
 import { MetarPanel } from '@renderer/components/MetarPanel'
 import { OfpSummaryPanel } from '@renderer/components/OfpSummaryPanel'
 import { FlightEventLog } from '@renderer/components/FlightEventLog'
+import { FlightRecorderPanel } from '@renderer/components/FlightRecorderPanel'
+import { CabinAnnouncementsRemote } from '@renderer/components/CabinAnnouncementsRemote'
 import { ArrowUpDownIcon, ClockIcon, CompassIcon, DropletIcon, GaugeIcon, TrendingUpIcon } from '@renderer/components/icons'
 import { computeLivePunctuality } from '@shared/flightStatus/computeLivePunctuality'
 import { computeFlightProgress } from '@shared/flightStatus/computeFlightProgress'
@@ -30,8 +32,10 @@ import type { SimTelemetry } from '@shared/types/simconnect'
 import type { OfpAirportSummary } from '@shared/simbrief/parseOfpDetail'
 
 export function LiveTrackingPage() {
+  const [cabinRemoteOpen, setCabinRemoteOpen] = useState(false)
   const status = useSimConnectStatus()
   const telemetry = useSimTelemetry()
+  const recorder = useFlightRecorderStatus()
   const { data: armedFlightId } = useArmedFlightId()
   const { data: flights } = useFlights()
   const armedFlight = (flights ?? []).find((flight) => flight.id === armedFlightId) ?? null
@@ -44,6 +48,9 @@ export function LiveTrackingPage() {
         <h1>Suivi de vol en direct</h1>
         {armedFlight ? (
           <div className="form-actions">
+            <button type="button" className="cabin-remote-open" onClick={() => setCabinRemoteOpen(true)}>
+              🔊 Annonces cabine
+            </button>
             <button type="button" onClick={() => completeManually.mutate()} disabled={completeManually.isPending}>
               Marquer comme terminé
             </button>
@@ -61,6 +68,8 @@ export function LiveTrackingPage() {
         ) : null}
       </div>
 
+      <FlightRecorderPanel recorder={recorder} connection={status} telemetry={telemetry} />
+
       {armedFlight ? (
         <ArmedFlightView flight={armedFlight} telemetry={telemetry} />
       ) : (
@@ -69,6 +78,7 @@ export function LiveTrackingPage() {
           <FlightPicker flights={flights ?? []} />
         </section>
       )}
+      {cabinRemoteOpen ? <CabinAnnouncementsRemote onClose={() => setCabinRemoteOpen(false)} /> : null}
     </div>
   )
 }
@@ -175,7 +185,7 @@ function ArmedFlightView({ flight, telemetry }: { flight: FlightWithRelations; t
 
       <section className="home-section">
         <h2>Résumé SimBrief</h2>
-        {ofp ? <OfpSummaryPanel ofp={ofp} /> : <p className="empty-hint">Aucun plan de vol SimBrief associé à ce vol.</p>}
+        {ofp ? <OfpSummaryPanel ofp={ofp} flight={flight} /> : <p className="empty-hint">Aucun plan de vol SimBrief associé à ce vol.</p>}
       </section>
 
       <section className="home-section">

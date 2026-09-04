@@ -8,6 +8,7 @@ import { electronApp, optimizer } from '@electron-toolkit/utils'
 if (!app.isPackaged) {
   app.setName('flightops-dev')
 }
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 import { createMainWindow } from './window'
 import { getDb, closeDb } from './db/index'
 import { registerSettingsHandlers } from './ipc/registerSettingsHandlers'
@@ -23,6 +24,21 @@ import { registerPirepHandlers } from './ipc/registerPirepHandlers'
 import { registerFlightHandlers } from './ipc/registerFlightHandlers'
 import { registerSimconnectHandlers } from './ipc/registerSimconnectHandlers'
 import { registerStatsHandlers } from './ipc/registerStatsHandlers'
+import { flushFlightRecorder } from './simconnect/flightStatusDetector'
+import { startFlightStatusScheduler, stopFlightStatusScheduler } from './flightStatusScheduler'
+import { registerCabinAnnouncementHandlers } from './ipc/registerCabinAnnouncementHandlers'
+import {
+  registerCabinAnnouncementProtocol,
+  registerCabinAnnouncementScheme
+} from './cabinAnnouncements/cabinAnnouncementProtocol'
+import { registerSimbriefPdfProtocol, registerSimbriefPdfScheme } from './simbrief/simbriefPdfProtocol'
+import { registerTabletHandlers } from './ipc/registerTabletHandlers'
+import { getTabletServerInfo, startTabletServer, stopTabletServer } from './tablet/tabletServer'
+import { registerUpdateHandlers } from './ipc/registerUpdateHandlers'
+import { startAppUpdater, stopAppUpdater } from './updater/appUpdater'
+
+registerCabinAnnouncementScheme()
+registerSimbriefPdfScheme()
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.flightops.app')
@@ -32,6 +48,9 @@ app.whenReady().then(() => {
   })
 
   getDb()
+  registerCabinAnnouncementProtocol()
+  registerSimbriefPdfProtocol()
+  startFlightStatusScheduler()
 
   registerSettingsHandlers()
   registerAppHandlers()
@@ -46,6 +65,20 @@ app.whenReady().then(() => {
   registerFlightHandlers()
   registerSimconnectHandlers()
   registerStatsHandlers()
+  registerCabinAnnouncementHandlers()
+  registerTabletHandlers()
+  registerUpdateHandlers()
+  startAppUpdater()
+
+  void startTabletServer()
+    .then(() => {
+      // Pratique pendant les tests locaux ; la version installée affiche ces informations
+      // uniquement dans Paramètres et ne révèle jamais son PIN dans un journal système.
+      if (!app.isPackaged) console.info('[Tablette]', getTabletServerInfo())
+    })
+    .catch((error) => {
+      console.error('Impossible de démarrer l’interface tablette :', error)
+    })
 
   createMainWindow()
 
@@ -55,6 +88,10 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  stopTabletServer()
+  stopAppUpdater()
+  stopFlightStatusScheduler()
+  flushFlightRecorder()
   closeDb()
   if (process.platform !== 'darwin') {
     app.quit()

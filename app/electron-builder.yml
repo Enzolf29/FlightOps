@@ -1,5 +1,6 @@
 appId: com.flightops.app
 productName: FlightOps
+artifactName: '${productName}-Setup-${version}.${ext}'
 directories:
   buildResources: resources
   output: dist
@@ -10,6 +11,11 @@ asarUnpack:
   - '**/*.node'
   - '**/node_modules/regedit/**'
 npmRebuild: false
+publish:
+  provider: github
+  owner: Enzolf29
+  repo: FlightOps
+  releaseType: release
 win:
   target: nsis
   icon: resources/icon.ico

@@ -7,7 +7,10 @@ import { Modal } from '@renderer/components/Modal'
 import { AircraftForm } from '@renderer/components/AircraftForm'
 import { PirepListRow } from '@renderer/components/PirepListRow'
 import { PirepDetail } from '@renderer/components/PirepDetail'
+import { StatGrid } from '@renderer/components/StatGrid'
+import { ActivityIcon, ClockIcon, DropletIcon, GaugeIcon, MapPinIcon, RouteIcon } from '@renderer/components/icons'
 import { formatHours, formatDateTime } from '@renderer/lib/format'
+import { getAirportLabel } from '@shared/airports/airportNames'
 import type { AircraftInput, AircraftWithStats } from '@shared/types/aircraft'
 import type { CallsignPattern, Company } from '@shared/types/company'
 
@@ -201,7 +204,7 @@ function AircraftTab() {
               onSort={handleSort}
             />
             <SortHeader
-              label="Vols"
+              label="Cycles"
               sortKey="flightCount"
               activeKey={sortKey}
               direction={sortDirection}
@@ -230,7 +233,7 @@ function AircraftTab() {
               <span>
                 {item.lastKnownIcao ? (
                   <>
-                    {item.lastKnownIcao}
+                    {getAirportLabel(item.lastKnownIcao)}
                     {item.lastKnownAt ? (
                       <span className="fleet-table-position-time"> ({formatDateTime(item.lastKnownAt)})</span>
                     ) : null}
@@ -251,8 +254,8 @@ function AircraftTab() {
                   </>
                 ) : (
                   <>
-                    <button type="button" onClick={() => setFlightsAircraft(item)}>
-                      Vols
+                    <button type="button" className="primary" onClick={() => setFlightsAircraft(item)}>
+                      Fiche
                     </button>
                     <button type="button" onClick={() => openEdit(item)}>
                       Modifier
@@ -300,7 +303,79 @@ function AircraftFlightsModal({ aircraft, onClose }: AircraftFlightsModalProps) 
   const selected = pireps?.find((pirep) => pirep.id === selectedId) ?? null
 
   return (
-    <Modal title={`Vols · ${aircraft.type}${aircraft.registration ? ` (${aircraft.registration})` : ''}`} onClose={onClose} wide>
+    <Modal title={`Fiche avion · ${aircraft.type}${aircraft.registration ? ` (${aircraft.registration})` : ''}`} onClose={onClose} wide>
+      <div className="aircraft-record-header">
+        <CompanyLogo
+          logoFilename={aircraft.company.logoFilename}
+          icaoCode={aircraft.company.icaoCode}
+          width={130}
+          height={58}
+        />
+        <div>
+          <strong>{aircraft.type}</strong>
+          <span>{aircraft.registration ?? 'Immatriculation non renseignée'} · {aircraft.company.displayName}</span>
+        </div>
+      </div>
+
+      <div className="aircraft-record-stats">
+        <StatGrid
+          compact
+          items={[
+          {
+            key: 'position',
+            label: 'Dernière position',
+            value: aircraft.lastKnownIcao ? getAirportLabel(aircraft.lastKnownIcao) : 'Aucun vol',
+            detail: aircraft.lastKnownAt ? `Arrivée ${formatDateTime(aircraft.lastKnownAt)}` : undefined,
+            icon: <MapPinIcon />
+          },
+          {
+            key: 'hours',
+            label: 'Heures totales',
+            value: formatHours(aircraft.cumulativeHours),
+            icon: <ClockIcon />
+          },
+          {
+            key: 'cycles',
+            label: 'Cycles',
+            value: String(aircraft.cycleCount),
+            detail: `${aircraft.cycleCount} vol${aircraft.cycleCount > 1 ? 's' : ''} terminé${aircraft.cycleCount > 1 ? 's' : ''}`,
+            icon: <ActivityIcon />
+          },
+          {
+            key: 'landing',
+            label: 'Atterrissage moyen',
+            value: aircraft.averageLandingFpm === null ? '—' : `${Math.round(aircraft.averageLandingFpm)} ft/min`,
+            icon: <GaugeIcon />
+          },
+          {
+            key: 'fuel',
+            label: 'Consommation moyenne',
+            value: aircraft.averageFuelConsumptionKg === null ? '—' : `${Math.round(aircraft.averageFuelConsumptionKg)} kg`,
+            detail: 'Démarrage à coupure moteurs',
+            icon: <DropletIcon />
+          },
+          {
+            key: 'distance',
+            label: 'Distance moyenne',
+            value: aircraft.averageDistanceNm === null ? '—' : `${Math.round(aircraft.averageDistanceNm)} NM`,
+            detail: 'Trajectoire réellement parcourue',
+            icon: <RouteIcon />
+          },
+          {
+            key: 'visited',
+            label: 'Aéroport le plus visité',
+            value: aircraft.mostVisitedIcao ? getAirportLabel(aircraft.mostVisitedIcao) : '—',
+            detail: aircraft.mostVisitedIcao ? `${aircraft.mostVisitedCount} arrivée${aircraft.mostVisitedCount > 1 ? 's' : ''}` : undefined,
+            icon: <MapPinIcon />
+          }
+          ]}
+        />
+      </div>
+
+      <div className="aircraft-history-title">
+        <h3>Historique des vols</h3>
+        <span>{pireps?.length ?? 0} vol{(pireps?.length ?? 0) > 1 ? 's' : ''}</span>
+      </div>
       {isLoading ? (
         <p className="page-loading">Chargement…</p>
       ) : !pireps || pireps.length === 0 ? (

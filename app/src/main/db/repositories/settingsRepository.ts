@@ -22,5 +22,5 @@ export function setSetting<K extends keyof AppSettings>(key: K, value: AppSettin
       `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
     )
-    .run(key, value === null ? null : String(value))
+    .run(key, value === null ? null : typeof value === 'object' ? JSON.stringify(value) : String(value))
 }

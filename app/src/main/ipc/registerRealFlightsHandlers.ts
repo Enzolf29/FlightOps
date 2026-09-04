@@ -11,11 +11,25 @@ import {
   getAllRoutesForCompany,
   getCachedRoutes,
   getFlightNumbersForRoute,
+  getKnownDepartureAirports,
   getRouteById,
-  upsertRouteFromApi
+  upsertRouteFromApi,
+  type RealRouteObservationInput
 } from '../db/repositories/realRoutesRepository'
 import { getAirportDepartures, type AerodataboxDeparture } from '../aerodatabox/aerodataboxClient'
 import { lookupAircraftByRegistration } from '../adsbdb/adsbdbClient'
+
+const MAX_COMPANY_REFRESH_AIRPORTS = 5
+
+function makeObservation(departure: AerodataboxDeparture): RealRouteObservationInput {
+  const observedAt = departure.scheduledDepartureUtc ?? departure.scheduledArrivalUtc ?? new Date().toISOString()
+  const identity = departure.flightNumber ?? departure.callSign ?? departure.aircraftRegistration ?? 'vol-inconnu'
+  return {
+    key: `${identity}|${departure.arrivalIcao ?? '----'}|${observedAt}`,
+    aircraftIcaoType: departure.aircraftIcaoType,
+    observedAt
+  }
+}
 
 /**
  * AeroDataBox donne parfois un modèle trop vague pour être rattaché à un code OACI précis
@@ -62,13 +76,17 @@ async function searchRealRoutes(
   const hasApiCache = cached.some((route) => route.source === 'api')
 
   if (hasApiCache && !forceRefresh) {
-    return { routes: cached, fetchedFromApi: false }
+    return {
+      routes: cached,
+      fetchedFromApi: false,
+      refreshedAirports: []
+    }
   }
 
   const apiKey = getPilot().aerodatabox_api_key
   if (!apiKey) {
     if (cached.length > 0) {
-      return { routes: cached, fetchedFromApi: false }
+      return { routes: cached, fetchedFromApi: false, refreshedAirports: [] }
     }
     throw new Error("Aucune clé API AeroDataBox configurée (Paramètres) et aucune donnée en cache pour cet aéroport.")
   }
@@ -81,13 +99,19 @@ async function searchRealRoutes(
     aircraft: Map<string, string>
     durations: number[]
     flightNumbers: Set<string>
+    observations: RealRouteObservationInput[]
   }
 
   const byArrival = new Map<string, RouteAccumulator>()
   for (const departure of companyDepartures) {
     if (!departure.arrivalIcao) continue
     const entry: RouteAccumulator =
-      byArrival.get(departure.arrivalIcao) ?? { aircraft: new Map(), durations: [], flightNumbers: new Set() }
+      byArrival.get(departure.arrivalIcao) ?? {
+        aircraft: new Map(),
+        durations: [],
+        flightNumbers: new Set(),
+        observations: []
+      }
     if (departure.aircraftTypeDescription) {
       entry.aircraft.set(departure.aircraftIcaoType ?? departure.aircraftTypeDescription, departure.aircraftTypeDescription)
     }
@@ -101,6 +125,7 @@ async function searchRealRoutes(
       const digits = extractFlightNumberFromCallsign(departure.flightNumber, company.iataCode)
       if (digits) entry.flightNumbers.add(digits)
     }
+    entry.observations.push(makeObservation(departure))
     byArrival.set(departure.arrivalIcao, entry)
   }
 
@@ -109,16 +134,54 @@ async function searchRealRoutes(
     const typicalDurationMinutes =
       entry.durations.length > 0 ? entry.durations.reduce((sum, value) => sum + value, 0) / entry.durations.length : null
 
-    const routeId = upsertRouteFromApi(companyId, normalizedDep, arrivalIcao, aircraft, typicalDurationMinutes)
+    const routeId = upsertRouteFromApi(
+      companyId,
+      normalizedDep,
+      arrivalIcao,
+      aircraft,
+      typicalDurationMinutes,
+      entry.observations
+    )
     for (const digits of entry.flightNumbers) {
       addFlightNumberObservation(routeId, digits)
     }
-    ensureReciprocalRoute(companyId, arrivalIcao, normalizedDep, aircraft, typicalDurationMinutes)
+    ensureReciprocalRoute(companyId, arrivalIcao, normalizedDep, aircraft, typicalDurationMinutes, entry.observations)
   }
 
   return {
     routes: getCachedRoutes(companyId, normalizedDep),
-    fetchedFromApi: true
+    fetchedFromApi: true,
+    refreshedAirports: [normalizedDep]
+  }
+}
+
+async function refreshCompanyRoutes(companyId: number): Promise<RealRouteSearchResult> {
+  const company = getCompanyById(companyId)
+  if (!company) throw new Error('Compagnie introuvable.')
+  const knownAirports = getKnownDepartureAirports(companyId)
+  if (knownAirports.length === 0) {
+    return {
+      routes: getAllRoutesForCompany(companyId),
+      fetchedFromApi: false,
+      refreshedAirports: []
+    }
+  }
+
+  // Aucun cooldown : chaque clic interroge immédiatement l'API. La requête compagnie reste
+  // limitée à cinq aéroports et le dépôt les classe du cache le plus ancien au plus récent ; des
+  // clics successifs font donc tourner progressivement l'ensemble du réseau connu.
+  const eligible = knownAirports.slice(0, MAX_COMPANY_REFRESH_AIRPORTS)
+
+  const refreshedAirports: string[] = []
+  for (const airport of eligible) {
+    const result = await searchRealRoutes(companyId, airport.icao, true)
+    refreshedAirports.push(...result.refreshedAirports)
+  }
+
+  return {
+    routes: getAllRoutesForCompany(companyId),
+    fetchedFromApi: refreshedAirports.length > 0,
+    refreshedAirports
   }
 }
 
@@ -140,4 +203,5 @@ export function registerRealFlightsHandlers(): void {
   ipcMain.handle(IPC.realFlights.suggestFlightNumber, (_event, routeId: number) => suggestFlightNumber(routeId))
 
   ipcMain.handle(IPC.realFlights.listKnownRoutes, (_event, companyId: number) => listKnownRoutes(companyId))
+  ipcMain.handle(IPC.realFlights.refreshCompanyRoutes, (_event, companyId: number) => refreshCompanyRoutes(companyId))
 }

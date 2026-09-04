@@ -9,20 +9,42 @@ interface RealRouteRow {
   source: RealRouteSource
   typical_duration_minutes: number | null
   last_fetched_at: string | null
+  last_observed_at: string | null
+  observation_count: number
+}
+
+export interface RealRouteObservationInput {
+  key: string
+  aircraftIcaoType: string | null
+  observedAt: string
 }
 
 const SELECT_ROUTE = `
-  SELECT r.id, r.company_id, r.departure_icao, r.arrival_icao, r.source, r.typical_duration_minutes, r.last_fetched_at
+  SELECT r.id, r.company_id, r.departure_icao, r.arrival_icao, r.source,
+    r.typical_duration_minutes, r.last_fetched_at,
+    MAX(o.observed_at) AS last_observed_at,
+    COUNT(o.id) AS observation_count
   FROM real_routes r
+  LEFT JOIN real_route_observations o ON o.real_route_id = r.id
 `
 
 function getAircraftForRoute(routeId: number): RealRouteAircraft[] {
   const rows = getDb()
     .prepare(
-      'SELECT icao_type, type_description FROM real_route_aircraft WHERE real_route_id = ? ORDER BY type_description ASC'
+      `SELECT a.icao_type, a.type_description, COUNT(o.id) AS observation_count
+       FROM real_route_aircraft a
+       LEFT JOIN real_route_observations o
+         ON o.real_route_id = a.real_route_id AND o.aircraft_icao_type = a.icao_type
+       WHERE a.real_route_id = ?
+       GROUP BY a.id
+       ORDER BY observation_count DESC, a.type_description ASC`
     )
-    .all(routeId) as Array<{ icao_type: string; type_description: string }>
-  return rows.map((row) => ({ icaoType: row.icao_type, typeDescription: row.type_description }))
+    .all(routeId) as Array<{ icao_type: string; type_description: string; observation_count: number }>
+  return rows.map((row) => ({
+    icaoType: row.icao_type,
+    typeDescription: row.type_description,
+    observationCount: row.observation_count
+  }))
 }
 
 function mapRoute(row: RealRouteRow): RealRoute {
@@ -34,13 +56,15 @@ function mapRoute(row: RealRouteRow): RealRoute {
     source: row.source,
     typicalDurationMinutes: row.typical_duration_minutes,
     lastFetchedAt: row.last_fetched_at,
+    lastObservedAt: row.last_observed_at,
+    observationCount: row.observation_count,
     aircraft: getAircraftForRoute(row.id)
   }
 }
 
 export function getCachedRoutes(companyId: number, departureIcao: string): RealRoute[] {
   const rows = getDb()
-    .prepare(`${SELECT_ROUTE} WHERE r.company_id = ? AND r.departure_icao = ? ORDER BY r.arrival_icao ASC`)
+    .prepare(`${SELECT_ROUTE} WHERE r.company_id = ? AND r.departure_icao = ? GROUP BY r.id ORDER BY r.arrival_icao ASC`)
     .all(companyId, departureIcao) as RealRouteRow[]
   return rows.map(mapRoute)
 }
@@ -49,13 +73,13 @@ export function getCachedRoutes(companyId: number, departureIcao: string): RealR
  * parcourir le réseau connu sans avoir à interroger l'API pour chaque aéroport un par un. */
 export function getAllRoutesForCompany(companyId: number): RealRoute[] {
   const rows = getDb()
-    .prepare(`${SELECT_ROUTE} WHERE r.company_id = ? ORDER BY r.departure_icao ASC, r.arrival_icao ASC`)
+    .prepare(`${SELECT_ROUTE} WHERE r.company_id = ? GROUP BY r.id ORDER BY r.departure_icao ASC, r.arrival_icao ASC`)
     .all(companyId) as RealRouteRow[]
   return rows.map(mapRoute)
 }
 
 export function getRouteById(id: number): RealRoute | null {
-  const row = getDb().prepare(`${SELECT_ROUTE} WHERE r.id = ?`).get(id) as RealRouteRow | undefined
+  const row = getDb().prepare(`${SELECT_ROUTE} WHERE r.id = ? GROUP BY r.id`).get(id) as RealRouteRow | undefined
   return row ? mapRoute(row) : null
 }
 
@@ -66,19 +90,30 @@ function findRouteId(companyId: number, departureIcao: string, arrivalIcao: stri
   return row?.id
 }
 
-/**
- * Remplace entièrement la liste d'avions d'une route (plutôt que d'accumuler) : chaque
- * rafraîchissement doit refléter exactement ce que le dernier passage a observé, pas une union
- * qui grossit indéfiniment (et qui garderait d'anciennes entrées erronées après correction d'un bug
- * de détection de type, par exemple).
- */
-function replaceAircraft(routeId: number, aircraft: RealRouteAircraft[]): void {
+/** Conserve tous les types déjà observés sur la route sans dupliquer une même variante OACI. */
+function mergeAircraft(routeId: number, aircraft: Array<Pick<RealRouteAircraft, 'icaoType' | 'typeDescription'>>): void {
   const db = getDb()
   const run = db.transaction(() => {
-    db.prepare('DELETE FROM real_route_aircraft WHERE real_route_id = ?').run(routeId)
-    const stmt = db.prepare('INSERT INTO real_route_aircraft (real_route_id, icao_type, type_description) VALUES (?, ?, ?)')
+    const stmt = db.prepare(
+      `INSERT INTO real_route_aircraft (real_route_id, icao_type, type_description) VALUES (?, ?, ?)
+       ON CONFLICT(real_route_id, icao_type) DO UPDATE SET type_description = excluded.type_description`
+    )
     for (const item of aircraft) {
       stmt.run(routeId, item.icaoType, item.typeDescription)
+    }
+  })
+  run()
+}
+
+function addObservations(routeId: number, observations: RealRouteObservationInput[], inferred: boolean): void {
+  const insert = getDb().prepare(
+    `INSERT OR IGNORE INTO real_route_observations
+       (real_route_id, observation_key, aircraft_icao_type, observed_at, inferred)
+     VALUES (?, ?, ?, ?, ?)`
+  )
+  const run = getDb().transaction(() => {
+    for (const observation of observations) {
+      insert.run(routeId, observation.key, observation.aircraftIcaoType, observation.observedAt, inferred ? 1 : 0)
     }
   })
   run()
@@ -89,8 +124,9 @@ export function upsertRouteFromApi(
   companyId: number,
   departureIcao: string,
   arrivalIcao: string,
-  aircraft: RealRouteAircraft[],
-  typicalDurationMinutes: number | null
+  aircraft: Array<Pick<RealRouteAircraft, 'icaoType' | 'typeDescription'>>,
+  typicalDurationMinutes: number | null,
+  observations: RealRouteObservationInput[]
 ): number {
   const db = getDb()
   db.prepare(
@@ -101,7 +137,8 @@ export function upsertRouteFromApi(
   ).run(companyId, departureIcao, arrivalIcao, typicalDurationMinutes)
 
   const routeId = findRouteId(companyId, departureIcao, arrivalIcao)!
-  replaceAircraft(routeId, aircraft)
+  mergeAircraft(routeId, aircraft)
+  addObservations(routeId, observations, false)
   return routeId
 }
 
@@ -113,8 +150,9 @@ export function ensureReciprocalRoute(
   companyId: number,
   departureIcao: string,
   arrivalIcao: string,
-  aircraft: RealRouteAircraft[],
-  typicalDurationMinutes: number | null
+  aircraft: Array<Pick<RealRouteAircraft, 'icaoType' | 'typeDescription'>>,
+  typicalDurationMinutes: number | null,
+  observations: RealRouteObservationInput[]
 ): void {
   const db = getDb()
   const existing = db
@@ -123,7 +161,15 @@ export function ensureReciprocalRoute(
 
   if (existing) {
     if (existing.source === 'reciprocal') {
-      replaceAircraft(existing.id, aircraft)
+      getDb().prepare(
+        `UPDATE real_routes SET typical_duration_minutes = ?, last_fetched_at = datetime('now') WHERE id = ?`
+      ).run(typicalDurationMinutes, existing.id)
+      mergeAircraft(existing.id, aircraft)
+      addObservations(
+        existing.id,
+        observations.map((observation) => ({ ...observation, key: `reciprocal:${observation.key}` })),
+        true
+      )
     }
     return
   }
@@ -134,7 +180,22 @@ export function ensureReciprocalRoute(
   ).run(companyId, departureIcao, arrivalIcao, typicalDurationMinutes)
 
   const routeId = findRouteId(companyId, departureIcao, arrivalIcao)!
-  replaceAircraft(routeId, aircraft)
+  mergeAircraft(routeId, aircraft)
+  addObservations(
+    routeId,
+    observations.map((observation) => ({ ...observation, key: `reciprocal:${observation.key}` })),
+    true
+  )
+}
+
+export function getKnownDepartureAirports(companyId: number): Array<{ icao: string; lastFetchedAt: string | null }> {
+  return getDb()
+    .prepare(
+      `SELECT departure_icao AS icao, MAX(last_fetched_at) AS lastFetchedAt
+       FROM real_routes WHERE company_id = ? AND source = 'api'
+       GROUP BY departure_icao ORDER BY lastFetchedAt ASC`
+    )
+    .all(companyId) as Array<{ icao: string; lastFetchedAt: string | null }>
 }
 
 export function addFlightNumberObservation(routeId: number, flightNumber: string): void {
