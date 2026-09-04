@@ -172,22 +172,30 @@ function TabletCompanionSection() {
           <small>Nouveau code à chaque lancement de FlightOps</small>
         </div>
         <div className="tablet-addresses">
-          <span>Adresse à saisir sur la tablette</span>
-          {info?.urls.length ? info.urls.map((url) => (
+          <span>1. Installation sécurisée — adresse à ouvrir une seule fois</span>
+          {info?.setupUrls.length ? info.setupUrls.map((url) => (
             <button key={url} type="button" onClick={() => copy(url)}>
               <code>{url}</code>
               <small>{copied === url ? 'Copié ✓' : 'Copier'}</small>
             </button>
           )) : <p className="empty-hint">Aucune adresse réseau détectée.</p>}
+          <span>2. Véritable application web HTTPS</span>
+          {info?.urls.length ? info.urls.map((url) => (
+            <button key={url} type="button" onClick={() => copy(url)}>
+              <code>{url}</code>
+              <small>{copied === url ? 'Copié ✓' : 'Copier'}</small>
+            </button>
+          )) : null}
         </div>
       </div>
       <div className="tablet-help">
         <span>① Gardez FlightOps ouvert</span>
-        <span>② Ouvrez l’adresse sur la tablette</span>
-        <span>③ Entrez le code à 6 chiffres</span>
+        <span>② Installez le certificat via l’adresse HTTP</span>
+        <span>③ Ouvrez ensuite l’adresse HTTPS</span>
+        <span>④ Installez la Web App et entrez le code</span>
       </div>
       <p className="tablet-network-note">
-        L’interface est locale uniquement. Au premier lancement, Windows peut demander d’autoriser FlightOps sur les réseaux privés : acceptez pour permettre la connexion de la tablette.
+        L’interface reste locale uniquement. L’installation du certificat est nécessaire une seule fois par tablette pour que le navigateur autorise la véritable PWA. Au premier lancement, Windows peut demander d’autoriser FlightOps sur les réseaux privés : acceptez.
         {info?.connectedClients ? ` ${info.connectedClients} tablette${info.connectedClients > 1 ? 's' : ''} connectée${info.connectedClients > 1 ? 's' : ''}.` : ''}
       </p>
     </section>
