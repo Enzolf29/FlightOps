@@ -108,7 +108,7 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
             <span className="stat-card-label">
               <ClockIcon /> Départ initial
             </span>
-            <span className="stat-card-value">{pirep.actualDepartureTime ? formatDateTime(pirep.actualDepartureTime) : '—'}</span>
+            <span className="stat-card-value">{formatDateTime(flight.scheduledDeparture)}</span>
           </div>
           <div className="stat-card pirep-schedule-dep-official">
             <span className="stat-card-label">
@@ -129,7 +129,7 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
             <span className="stat-card-label">
               <ClockIcon /> Arrivée initiale
             </span>
-            <span className="stat-card-value">{pirep.actualArrivalTime ? formatDateTime(pirep.actualArrivalTime) : '—'}</span>
+            <span className="stat-card-value">{formatDateTime(flight.scheduledArrival)}</span>
           </div>
           <div className="stat-card pirep-schedule-arr-official">
             <span className="stat-card-label">
