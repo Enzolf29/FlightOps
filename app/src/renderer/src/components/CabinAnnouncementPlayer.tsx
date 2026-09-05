@@ -23,6 +23,8 @@ import type { CabinLoadsheetSnapshot } from '@shared/types/loadsheet'
 interface QueuedAnnouncement {
   type: CabinAnnouncementType
   origin: CabinPlaybackOrigin
+  /** Attente démarrée uniquement lorsque l'annonce atteint la tête de file. */
+  delayBeforeMs?: number
 }
 
 function positiveOrNull(value: number | undefined): number | null {
@@ -84,6 +86,8 @@ export function CabinAnnouncementPlayer() {
 
   const filesRef = useRef<Map<CabinAnnouncementType, CabinAnnouncementFile>>(new Map())
   const queueRef = useRef<QueuedAnnouncement[]>([])
+  const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const delayedTypeRef = useRef<CabinAnnouncementType | null>(null)
   const voiceRef = useRef<HTMLAudioElement | null>(null)
   const voiceTypeRef = useRef<CabinAnnouncementType | null>(null)
   const voiceOriginRef = useRef<CabinPlaybackOrigin | null>(null)
@@ -130,11 +134,32 @@ export function CabinAnnouncementPlayer() {
   }, [publishPlayback])
 
   const playNext = useCallback(function playNextInQueue() {
-    if (voiceRef.current || queueRef.current.length === 0) {
+    if (voiceRef.current || delayTimerRef.current || queueRef.current.length === 0) {
       if (!voiceRef.current && musicRef.current) musicRef.current.volume = musicBaseVolumeRef.current
       publishPlayback()
       return
     }
+
+    const nextQueued = queueRef.current[0]
+    if ((nextQueued.delayBeforeMs ?? 0) > 0) {
+      const delayMs = nextQueued.delayBeforeMs!
+      // Le délai ne doit pas pouvoir être réarmé par une nouvelle télémétrie ou un rafraîchissement
+      // de l'interface pendant les 30 secondes d'attente.
+      nextQueued.delayBeforeMs = 0
+      delayedTypeRef.current = nextQueued.type
+      delayTimerRef.current = setTimeout(() => {
+        delayTimerRef.current = null
+        delayedTypeRef.current = null
+        if (playbackAllowedRef.current) playNextInQueue()
+        else {
+          queueRef.current = []
+          publishPlayback()
+        }
+      }, delayMs)
+      publishPlayback()
+      return
+    }
+
     const queued = queueRef.current.shift()!
     const file = filesRef.current.get(queued.type)
     if (!file) {
@@ -226,14 +251,25 @@ export function CabinAnnouncementPlayer() {
   }, [playNext, publishPlayback, startMusic])
 
   const stopType = useCallback((type: CabinAnnouncementType) => {
+    if (delayedTypeRef.current === type && delayTimerRef.current) {
+      clearTimeout(delayTimerRef.current)
+      delayTimerRef.current = null
+      delayedTypeRef.current = null
+    }
     queueRef.current = queueRef.current.filter((item) => item.type !== type)
     if (type === 'boarding_music') stopMusic()
     else if (voiceTypeRef.current === type) stopVoice()
-    else publishPlayback()
-  }, [publishPlayback, stopMusic, stopVoice])
+    else {
+      publishPlayback()
+      queueMicrotask(playNext)
+    }
+  }, [playNext, publishPlayback, stopMusic, stopVoice])
 
   const stopAll = useCallback(() => {
     queueRef.current = []
+    if (delayTimerRef.current) clearTimeout(delayTimerRef.current)
+    delayTimerRef.current = null
+    delayedTypeRef.current = null
     const voice = voiceRef.current
     if (voice) {
       voice.onended = null
@@ -304,7 +340,11 @@ export function CabinAnnouncementPlayer() {
     for (const action of actions) {
       if (action.kind === 'start_boarding_music') startMusic('automatic')
       else if (action.kind === 'stop_boarding_music') stopMusic()
-      else queueRef.current.push(...action.types.map((type) => ({ type, origin: 'automatic' as const })))
+      else queueRef.current.push(...action.types.map((type) => ({
+        type,
+        origin: 'automatic' as const,
+        delayBeforeMs: action.delayBefore?.type === type ? action.delayBefore.milliseconds : undefined
+      })))
     }
     publishPlayback()
     playNext()

@@ -3,6 +3,7 @@ import type { SimTelemetry } from '../types/simconnect'
 import {
   evaluateCabinAnnouncementTriggers,
   INITIAL_CABIN_ANNOUNCEMENT_TRIGGER_STATE,
+  SAFETY_BRIEFING_DELAY_MS,
   type CabinAnnouncementTriggerState
 } from './evaluateCabinAnnouncementTriggers'
 
@@ -86,7 +87,8 @@ describe('evaluateCabinAnnouncementTriggers', () => {
     expect(step(stopped, running, initialized).actions).toEqual([
       {
         kind: 'enqueue',
-        types: ['arm_doors', 'presafety_briefing', 'safety_briefing', 'cabin_dim_takeoff', 'crew_seat_takeoff']
+        types: ['arm_doors', 'presafety_briefing', 'safety_briefing', 'cabin_dim_takeoff', 'crew_seat_takeoff'],
+        delayBefore: { type: 'safety_briefing', milliseconds: SAFETY_BRIEFING_DELAY_MS }
       }
     ])
   })
@@ -105,7 +107,8 @@ describe('evaluateCabinAnnouncementTriggers', () => {
     const first = step(stopped, running, initialized)
     expect(first.actions).toEqual([{
       kind: 'enqueue',
-      types: ['arm_doors', 'presafety_briefing', 'safety_briefing', 'crew_seat_takeoff']
+      types: ['arm_doors', 'presafety_briefing', 'safety_briefing', 'crew_seat_takeoff'],
+      delayBefore: { type: 'safety_briefing', milliseconds: SAFETY_BRIEFING_DELAY_MS }
     }])
     expect(first.nextState.armDoorsTriggered).toBe(true)
     expect(step(running, running, first.nextState).actions).toEqual([])

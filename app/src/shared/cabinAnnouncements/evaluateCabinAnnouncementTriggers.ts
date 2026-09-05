@@ -4,7 +4,13 @@ import type { CabinAnnouncementType } from '../types/cabinAnnouncements'
 export type CabinAnnouncementAction =
   | { kind: 'start_boarding_music' }
   | { kind: 'stop_boarding_music' }
-  | { kind: 'enqueue'; types: CabinAnnouncementType[] }
+  | {
+      kind: 'enqueue'
+      types: CabinAnnouncementType[]
+      /** Délai appliqué lorsque cette annonce arrive en tête de file. Il commence donc après la
+       * fin réelle de l'annonce précédente, quelle que soit la durée du fichier audio. */
+      delayBefore?: { type: CabinAnnouncementType; milliseconds: number }
+    }
 
 export interface CabinAnnouncementTriggerState {
   initialized: boolean
@@ -50,10 +56,22 @@ const DESCENT_VERTICAL_SPEED_FPM = -500
 const TAKEOFF_ANNOUNCEMENT_ALTITUDE_FEET = 9_000
 const LANDING_CREW_ALTITUDE_AGL_FEET = 5_000
 const MINIMUM_REAL_FLIGHT_AGL_FEET = 200
+export const SAFETY_BRIEFING_DELAY_MS = 30_000
 
 function isNight(timeOfDay: number | undefined): boolean {
   // SimConnect TIME OF DAY : 1 aube, 2 jour, 3 crépuscule, 4 nuit.
   return timeOfDay === 3 || timeOfDay === 4
+}
+
+function engineStartSequence(timeOfDay: number | undefined): CabinAnnouncementAction {
+  const sequence: CabinAnnouncementType[] = ['arm_doors', 'presafety_briefing', 'safety_briefing']
+  if (isNight(timeOfDay)) sequence.push('cabin_dim_takeoff')
+  sequence.push('crew_seat_takeoff')
+  return {
+    kind: 'enqueue',
+    types: sequence,
+    delayBefore: { type: 'safety_briefing', milliseconds: SAFETY_BRIEFING_DELAY_MS }
+  }
 }
 
 export function evaluateCabinAnnouncementTriggers(
@@ -81,10 +99,7 @@ export function evaluateCabinAnnouncementTriggers(
       next.lastBoardingWelcomeAtMs = nowMs
     }
     if (current.enginesRunning && current.onGround) {
-      const sequence: CabinAnnouncementType[] = ['arm_doors', 'presafety_briefing', 'safety_briefing']
-      if (isNight(current.timeOfDay)) sequence.push('cabin_dim_takeoff')
-      sequence.push('crew_seat_takeoff')
-      actions.push({ kind: 'enqueue', types: sequence })
+      actions.push(engineStartSequence(current.timeOfDay))
       next.armDoorsTriggered = true
       next.engineSequenceTriggered = true
     }
@@ -112,10 +127,7 @@ export function evaluateCabinAnnouncementTriggers(
   next.boardingActive = boardingActive
 
   if (!state.engineSequenceTriggered && !previous?.enginesRunning && current.enginesRunning) {
-    const sequence: CabinAnnouncementType[] = ['arm_doors', 'presafety_briefing', 'safety_briefing']
-    if (isNight(current.timeOfDay)) sequence.push('cabin_dim_takeoff')
-    sequence.push('crew_seat_takeoff')
-    actions.push({ kind: 'enqueue', types: sequence })
+    actions.push(engineStartSequence(current.timeOfDay))
     next.armDoorsTriggered = true
     next.engineSequenceTriggered = true
   }
