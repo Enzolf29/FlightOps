@@ -23,6 +23,12 @@ const OfpResponseSchema = z
       })
       .passthrough()
       .optional(),
+    atc: z
+      .object({
+        callsign: z.unknown().optional()
+      })
+      .passthrough()
+      .optional(),
     origin: z
       .object({
         icao_code: z.string()
@@ -61,6 +67,37 @@ function unixToIso(value: string | number): string {
 
 export class SimbriefFetchError extends Error {}
 
+function optionalString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+/** Transforme la réponse JSON brute en OFP FlightOps sans perdre le callsign ATC de SimBrief. */
+export function parseSimbriefOfpPayload(json: unknown): SimbriefOfp {
+  const parsed = OfpResponseSchema.safeParse(json)
+
+  if (!parsed.success) {
+    throw new SimbriefFetchError(
+      'Aucun plan de vol trouvé pour cet ID SimBrief, ou format de réponse inattendu.'
+    )
+  }
+
+  const { general, atc, origin, destination, alternate, aircraft, times } = parsed.data
+
+  return {
+    icaoAirline: general?.icao_airline ?? null,
+    flightNumberDigits: general?.flight_number ?? null,
+    callsign: optionalString(atc?.callsign),
+    departureIcao: origin.icao_code,
+    arrivalIcao: destination.icao_code,
+    alternateIcao: alternate?.icao_code ?? null,
+    scheduledDepartureUtc: unixToIso(times.sched_out),
+    scheduledArrivalUtc: unixToIso(times.sched_in),
+    route: general?.route ?? null,
+    aircraftIcaoType: aircraft?.icaocode ?? null,
+    rawJson: JSON.stringify(json)
+  }
+}
+
 export async function fetchLatestOfp(simbriefUserId: string): Promise<SimbriefOfp> {
   // Accepte aussi bien l'ID numérique SimBrief que le pseudo (pilot ID) choisi par l'utilisateur.
   const param = /^\d+$/.test(simbriefUserId.trim()) ? 'userid' : 'username'
@@ -77,27 +114,5 @@ export async function fetchLatestOfp(simbriefUserId: string): Promise<SimbriefOf
     throw new SimbriefFetchError(`SimBrief a répondu avec une erreur (HTTP ${response.status})`)
   }
 
-  const json = await response.json()
-  const parsed = OfpResponseSchema.safeParse(json)
-
-  if (!parsed.success) {
-    throw new SimbriefFetchError(
-      'Aucun plan de vol trouvé pour cet ID SimBrief, ou format de réponse inattendu.'
-    )
-  }
-
-  const { general, origin, destination, alternate, aircraft, times } = parsed.data
-
-  return {
-    icaoAirline: general?.icao_airline ?? null,
-    flightNumberDigits: general?.flight_number ?? null,
-    departureIcao: origin.icao_code,
-    arrivalIcao: destination.icao_code,
-    alternateIcao: alternate?.icao_code ?? null,
-    scheduledDepartureUtc: unixToIso(times.sched_out),
-    scheduledArrivalUtc: unixToIso(times.sched_in),
-    route: general?.route ?? null,
-    aircraftIcaoType: aircraft?.icaocode ?? null,
-    rawJson: JSON.stringify(json)
-  }
+  return parseSimbriefOfpPayload(await response.json())
 }

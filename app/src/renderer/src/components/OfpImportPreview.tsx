@@ -20,6 +20,7 @@ interface Resolution {
   company: Company
   aircraft: AircraftWithStats
   flightNumberDigits: string
+  callsign: string
 }
 
 function resolveImport(
@@ -53,7 +54,11 @@ function resolveImport(
     return { ok: false, reason: "Aucun numéro de vol renseigné dans le plan SimBrief." }
   }
 
-  return { ok: true, data: { company, aircraft, flightNumberDigits: ofp.flightNumberDigits } }
+  if (!ofp.callsign) {
+    return { ok: false, reason: "Aucun callsign ATC renseigné dans le plan SimBrief." }
+  }
+
+  return { ok: true, data: { company, aircraft, flightNumberDigits: ofp.flightNumberDigits, callsign: ofp.callsign } }
 }
 
 export function OfpImportPreview({ ofp, companies, source, onCreated }: OfpImportPreviewProps) {
@@ -78,6 +83,7 @@ export function OfpImportPreview({ ofp, companies, source, onCreated }: OfpImpor
         companyId: resolution.data.company.id,
         aircraftId: resolution.data.aircraft.id,
         flightNumberDigits: resolution.data.flightNumberDigits,
+        callsign: resolution.data.callsign,
         departureIcao: ofp.departureIcao,
         arrivalIcao: ofp.arrivalIcao,
         alternateIcao: trimmedAlternate ? trimmedAlternate : null,
@@ -109,6 +115,12 @@ export function OfpImportPreview({ ofp, companies, source, onCreated }: OfpImpor
           <div className="ofp-summary-row">
             <span className="ofp-summary-label">Avion (SimBrief)</span>
             <span>{ofp.aircraftIcaoType}</span>
+          </div>
+        ) : null}
+        {ofp.callsign ? (
+          <div className="ofp-summary-row">
+            <span className="ofp-summary-label">Callsign ATC (SimBrief)</span>
+            <strong>{ofp.callsign}</strong>
           </div>
         ) : null}
         {ofp.route ? (

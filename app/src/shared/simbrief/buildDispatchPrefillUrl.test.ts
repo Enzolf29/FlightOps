@@ -9,6 +9,7 @@ describe('buildDispatchPrefillUrl', () => {
         destIcao: 'LFRB',
         aircraftIcaoType: 'A20N',
         airlineIcao: 'AFR',
+        callsign: 'AFR42AB',
         registration: 'F-HZUK',
         scheduledDeparture: new Date('2026-07-31T10:00:00Z')
       })
@@ -16,6 +17,7 @@ describe('buildDispatchPrefillUrl', () => {
 
     expect(url.searchParams.get('type')).toBe('A20N')
     expect(url.searchParams.get('reg')).toBe('F-HZUK')
+    expect(url.searchParams.get('callsign')).toBe('AFR42AB')
   })
 
   it("ignore l'Internal ID SimBrief (non supporté par ce formulaire, réservé à l'API) sans casser le préremplissage", () => {

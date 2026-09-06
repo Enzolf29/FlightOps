@@ -2,10 +2,9 @@ import { ipcMain } from 'electron'
 import { IPC } from '@shared/ipc/contract'
 import type { CreateFlightFromOfpInput } from '@shared/types/booking'
 import type { FlightWithRelations } from '@shared/types/flight'
-import { generateCallsign } from '@shared/callsign/generateCallsign'
 import { isoToSqliteUtc } from '@shared/lib/datetime'
 import { getCompanyById } from '../db/repositories/companyRepository'
-import { createFlight, getAllCallsigns, getFlightWithRelationsById } from '../db/repositories/flightRepository'
+import { createFlight, getFlightWithRelationsById } from '../db/repositories/flightRepository'
 
 export function registerBookingHandlers(): void {
   ipcMain.handle(IPC.booking.createFromOfp, (_event, input: CreateFlightFromOfpInput): FlightWithRelations => {
@@ -14,19 +13,17 @@ export function registerBookingHandlers(): void {
       throw new Error('Compagnie introuvable.')
     }
 
-    const { raw, display } = generateCallsign({
-      icaoCode: company.icaoCode,
-      radioCallsign: company.radioCallsign,
-      pattern: company.callsignPattern,
-      existingCallsigns: getAllCallsigns()
-    })
+    const callsign = input.callsign.trim()
+    if (!callsign) {
+      throw new Error('Aucun callsign ATC renseigné dans le plan SimBrief.')
+    }
 
     const id = createFlight({
       companyId: input.companyId,
       aircraftId: input.aircraftId,
       flightNumber: company.iataCode + input.flightNumberDigits,
-      callsign: raw,
-      callsignDisplay: display,
+      callsign,
+      callsignDisplay: callsign,
       departureIcao: input.departureIcao,
       arrivalIcao: input.arrivalIcao,
       scheduledDeparture: isoToSqliteUtc(input.scheduledDepartureUtc),

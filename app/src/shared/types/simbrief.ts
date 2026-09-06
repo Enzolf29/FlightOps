@@ -3,6 +3,8 @@ export interface SimbriefOfp {
   icaoAirline: string | null
   /** Numéro de vol brut (chiffres uniquement), ex. "1445". */
   flightNumberDigits: string | null
+  /** Callsign ATC exact du plan SimBrief, ex. "AFR42AB". */
+  callsign: string | null
   departureIcao: string
   arrivalIcao: string
   alternateIcao: string | null
