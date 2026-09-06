@@ -57,6 +57,7 @@ function makeLoadsheetSnapshot(telemetry: SimTelemetry, captureSource: Loadsheet
 export function CabinAnnouncementPlayer() {
   const telemetry = useSimTelemetry()
   const simconnectStatus = useSimConnectStatus()
+  const automaticAnnouncementsEnabled = useCabinAnnouncementStore((state) => state.automaticAnnouncementsEnabled)
   const { data: armedFlightId = null } = useArmedFlightId()
   const { data: flights = [] } = useQuery({ queryKey: ['flights'], queryFn: () => window.flightops.flights.list() })
   const { data: companies = [] } = useQuery({
@@ -331,10 +332,10 @@ export function CabinAnnouncementPlayer() {
       } : null,
       flightId: activeFlight?.id ?? null,
       simconnectConnected: simconnectStatus === 'connected',
-      automationReady: Boolean(automationSessionReady && detectedCompany && filesReady),
+      automationReady: Boolean(automaticAnnouncementsEnabled && automationSessionReady && detectedCompany && filesReady),
       gsxDetected: Boolean(automationSessionReady && telemetry && ((telemetry.gsxBoardingState ?? 0) > 0 || (telemetry.gsxDepartureState ?? 0) > 0))
     })
-  }, [activeFlight, automationSessionReady, detectedCompany, filesReady, simconnectStatus, telemetry])
+  }, [activeFlight, automaticAnnouncementsEnabled, automationSessionReady, detectedCompany, filesReady, simconnectStatus, telemetry])
 
   const executeActions = useCallback((actions: CabinAnnouncementAction[]) => {
     for (const action of actions) {
@@ -343,7 +344,7 @@ export function CabinAnnouncementPlayer() {
       else queueRef.current.push(...action.types.map((type) => ({
         type,
         origin: 'automatic' as const,
-        delayBeforeMs: action.delayBefore?.type === type ? action.delayBefore.milliseconds : undefined
+        delayBeforeMs: action.delaysBefore?.[type]
       })))
     }
     publishPlayback()
@@ -358,8 +359,46 @@ export function CabinAnnouncementPlayer() {
     triggerStateRef.current = INITIAL_CABIN_ANNOUNCEMENT_TRIGGER_STATE
     loadsheetCompletionRef.current = INITIAL_LOADSHEET_COMPLETION_STATE
     previousTelemetryRef.current = null
+    useCabinAnnouncementStore.getState().setAutomaticAnnouncementsEnabled(true)
     useCabinAnnouncementStore.getState().publish({ boardingCompleted: false, finalLoadsheet: null })
   }, [activeFlight?.id, stopAll])
+
+  useEffect(() => {
+    if (automaticAnnouncementsEnabled) return
+
+    // Couper l'automatisation annule uniquement ce qu'elle a lancé. Une annonce déclenchée
+    // manuellement reste audible et la télécommande demeure utilisable.
+    queueRef.current = queueRef.current.filter((item) => item.origin !== 'automatic')
+    if (delayTimerRef.current) clearTimeout(delayTimerRef.current)
+    delayTimerRef.current = null
+    delayedTypeRef.current = null
+
+    if (voiceOriginRef.current === 'automatic') {
+      const voice = voiceRef.current
+      if (voice) {
+        voice.onended = null
+        voice.onerror = null
+        voice.pause()
+        voice.currentTime = 0
+      }
+      voiceRef.current = null
+      voiceTypeRef.current = null
+      voiceOriginRef.current = null
+    }
+    if (musicOriginRef.current === 'automatic') {
+      const music = musicRef.current
+      if (music) {
+        music.onended = null
+        music.onerror = null
+        music.pause()
+        music.currentTime = 0
+      }
+      musicRef.current = null
+      musicOriginRef.current = null
+    }
+    publishPlayback()
+    queueMicrotask(playNext)
+  }, [automaticAnnouncementsEnabled, playNext, publishPlayback])
 
   useEffect(() => {
     if (!telemetry || !activeFlight || !automationSessionReady) return
@@ -391,8 +430,8 @@ export function CabinAnnouncementPlayer() {
     const result = evaluateCabinAnnouncementTriggers(previousTelemetryRef.current, telemetry, triggerStateRef.current, Date.now())
     triggerStateRef.current = result.nextState
     previousTelemetryRef.current = telemetry
-    executeActions(result.actions)
-  }, [telemetry, activeFlight, detectedCompany, filesReady, automationSessionReady, executeActions])
+    if (automaticAnnouncementsEnabled) executeActions(result.actions)
+  }, [telemetry, activeFlight, detectedCompany, filesReady, automationSessionReady, automaticAnnouncementsEnabled, executeActions])
 
   useEffect(() => {
     if (automationSessionReady) return

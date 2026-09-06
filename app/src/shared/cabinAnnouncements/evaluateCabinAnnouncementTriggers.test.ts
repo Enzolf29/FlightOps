@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { SimTelemetry } from '../types/simconnect'
 import {
   evaluateCabinAnnouncementTriggers,
+  CABIN_DIM_DELAY_MS,
   INITIAL_CABIN_ANNOUNCEMENT_TRIGGER_STATE,
   SAFETY_BRIEFING_DELAY_MS,
   type CabinAnnouncementTriggerState
@@ -80,38 +81,56 @@ describe('evaluateCabinAnnouncementTriggers', () => {
     ])
   })
 
-  it('queues the complete night safety sequence at first engine start', () => {
+  it('queues the night safety sequence at first engine start with delays after each briefing', () => {
     const stopped = telemetry({ timeOfDay: 4 })
     const initialized = step(null, stopped, INITIAL_CABIN_ANNOUNCEMENT_TRIGGER_STATE).nextState
     const running = telemetry({ enginesRunning: true, engine1Running: true, timeOfDay: 4 })
     expect(step(stopped, running, initialized).actions).toEqual([
       {
         kind: 'enqueue',
-        types: ['arm_doors', 'presafety_briefing', 'safety_briefing', 'cabin_dim_takeoff', 'crew_seat_takeoff'],
-        delayBefore: { type: 'safety_briefing', milliseconds: SAFETY_BRIEFING_DELAY_MS }
+        types: ['presafety_briefing', 'safety_briefing', 'cabin_dim_takeoff'],
+        delaysBefore: {
+          safety_briefing: SAFETY_BRIEFING_DELAY_MS,
+          cabin_dim_takeoff: CABIN_DIM_DELAY_MS
+        }
       }
     ])
   })
 
-  it('does not trigger arm doors when GSX pushback starts before the engines', () => {
+  it('triggers arm doors when GSX pushback starts before the engines', () => {
     const idle = telemetry()
     const initialized = step(null, idle, INITIAL_CABIN_ANNOUNCEMENT_TRIGGER_STATE).nextState
     const pushback = telemetry({ gsxPushbackFrozen: true, gsxDepartureState: 5 })
-    expect(step(idle, pushback, initialized).actions).toEqual([])
+    const started = step(idle, pushback, initialized)
+    expect(started.actions).toEqual([{ kind: 'enqueue', types: ['arm_doors'] }])
+    expect(started.nextState.armDoorsTriggered).toBe(true)
+    expect(step(pushback, pushback, started.nextState).actions).toEqual([])
   })
 
-  it('queues arm doors before both safety briefings at first engine start', () => {
+  it('queues presafety then safety at first engine start without replaying arm doors', () => {
     const stopped = telemetry()
     const initialized = step(null, stopped, INITIAL_CABIN_ANNOUNCEMENT_TRIGGER_STATE).nextState
     const running = telemetry({ enginesRunning: true, engine1Running: true })
     const first = step(stopped, running, initialized)
     expect(first.actions).toEqual([{
       kind: 'enqueue',
-      types: ['arm_doors', 'presafety_briefing', 'safety_briefing', 'crew_seat_takeoff'],
-      delayBefore: { type: 'safety_briefing', milliseconds: SAFETY_BRIEFING_DELAY_MS }
+      types: ['presafety_briefing', 'safety_briefing'],
+      delaysBefore: { safety_briefing: SAFETY_BRIEFING_DELAY_MS }
     }])
-    expect(first.nextState.armDoorsTriggered).toBe(true)
+    expect(first.nextState.armDoorsTriggered).toBe(false)
     expect(step(running, running, first.nextState).actions).toEqual([])
+  })
+
+  it('triggers crew seat takeoff once when either strobes or landing lights are switched on', () => {
+    const idle = telemetry()
+    const initialized = step(null, idle, INITIAL_CABIN_ANNOUNCEMENT_TRIGGER_STATE).nextState
+    const strobesOn = telemetry({ strobeLightsOn: true })
+    const first = step(idle, strobesOn, initialized)
+    expect(first.actions).toEqual([{ kind: 'enqueue', types: ['crew_seat_takeoff'] }])
+    expect(first.nextState.crewSeatTakeoffTriggered).toBe(true)
+
+    const landingLightsToo = telemetry({ strobeLightsOn: true, landingLightsOn: true })
+    expect(step(strobesOn, landingLightsToo, first.nextState).actions).toEqual([])
   })
 
   it('triggers climb, confirmed descent and 5000 ft announcements in sequence', () => {

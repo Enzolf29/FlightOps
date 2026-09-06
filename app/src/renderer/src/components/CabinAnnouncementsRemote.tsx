@@ -7,6 +7,7 @@ import { Modal } from './Modal'
 export function CabinAnnouncementsRemote({ onClose }: { onClose: () => void }) {
   const company = useCabinAnnouncementStore((state) => state.company)
   const automationReady = useCabinAnnouncementStore((state) => state.automationReady)
+  const automaticAnnouncementsEnabled = useCabinAnnouncementStore((state) => state.automaticAnnouncementsEnabled)
   const simconnectConnected = useCabinAnnouncementStore((state) => state.simconnectConnected)
   const gsxDetected = useCabinAnnouncementStore((state) => state.gsxDetected)
   const activeVoice = useCabinAnnouncementStore((state) => state.activeVoice)
@@ -40,7 +41,7 @@ export function CabinAnnouncementsRemote({ onClose }: { onClose: () => void }) {
           )}
           <div className="cabin-remote-connection">
             <span className={'cabin-connection-dot' + (automationReady ? ' cabin-connection-dot--connected' : '')} />
-            <strong>{automationReady ? 'Automatisation active' : 'Automatisation en attente'}</strong>
+            <strong>{!automaticAnnouncementsEnabled ? 'Automatisation désactivée' : automationReady ? 'Automatisation active' : 'Automatisation en attente'}</strong>
             <small>{!simconnectConnected ? 'SimConnect non connecté' : gsxDetected ? 'GSX détecté' : 'SimConnect connecté · GSX en attente'}</small>
           </div>
         </div>

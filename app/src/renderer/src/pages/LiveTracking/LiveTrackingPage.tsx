@@ -20,6 +20,7 @@ import { OfpSummaryPanel } from '@renderer/components/OfpSummaryPanel'
 import { FlightEventLog } from '@renderer/components/FlightEventLog'
 import { FlightRecorderPanel } from '@renderer/components/FlightRecorderPanel'
 import { CabinAnnouncementsRemote } from '@renderer/components/CabinAnnouncementsRemote'
+import { useCabinAnnouncementStore } from '@renderer/stores/cabinAnnouncementStore'
 import { ArrowUpDownIcon, ClockIcon, CompassIcon, DropletIcon, GaugeIcon, TrendingUpIcon } from '@renderer/components/icons'
 import { computeLivePunctuality } from '@shared/flightStatus/computeLivePunctuality'
 import { computeFlightProgress } from '@shared/flightStatus/computeFlightProgress'
@@ -41,6 +42,8 @@ export function LiveTrackingPage() {
   const armedFlight = (flights ?? []).find((flight) => flight.id === armedFlightId) ?? null
   const disarmFlight = useDisarmFlight()
   const completeManually = useCompleteManually()
+  const automaticAnnouncementsEnabled = useCabinAnnouncementStore((state) => state.automaticAnnouncementsEnabled)
+  const setAutomaticAnnouncementsEnabled = useCabinAnnouncementStore((state) => state.setAutomaticAnnouncementsEnabled)
 
   return (
     <div className="fleet-page">
@@ -48,6 +51,15 @@ export function LiveTrackingPage() {
         <h1>Suivi de vol en direct</h1>
         {armedFlight ? (
           <div className="form-actions">
+            <button
+              type="button"
+              aria-pressed={automaticAnnouncementsEnabled}
+              className={`cabin-auto-toggle cabin-auto-toggle--${automaticAnnouncementsEnabled ? 'on' : 'off'}`}
+              title="La lecture manuelle reste disponible"
+              onClick={() => setAutomaticAnnouncementsEnabled(!automaticAnnouncementsEnabled)}
+            >
+              {automaticAnnouncementsEnabled ? '🔊 Annonces auto' : '🔇 Annonces auto'}
+            </button>
             <button type="button" className="cabin-remote-open" onClick={() => setCabinRemoteOpen(true)}>
               🔊 Annonces cabine
             </button>

@@ -7,9 +7,9 @@ export type CabinAnnouncementAction =
   | {
       kind: 'enqueue'
       types: CabinAnnouncementType[]
-      /** Délai appliqué lorsque cette annonce arrive en tête de file. Il commence donc après la
-       * fin réelle de l'annonce précédente, quelle que soit la durée du fichier audio. */
-      delayBefore?: { type: CabinAnnouncementType; milliseconds: number }
+      /** Délais appliqués lorsque chaque annonce arrive en tête de file. Ils commencent donc après
+       * la fin réelle de l'annonce précédente, quelle que soit la durée du fichier audio. */
+      delaysBefore?: Partial<Record<CabinAnnouncementType, number>>
     }
 
 export interface CabinAnnouncementTriggerState {
@@ -18,6 +18,7 @@ export interface CabinAnnouncementTriggerState {
   lastBoardingWelcomeAtMs: number | null
   armDoorsTriggered: boolean
   engineSequenceTriggered: boolean
+  crewSeatTakeoffTriggered: boolean
   hasTakenOff: boolean
   reachedMinimumAirborneHeight: boolean
   afterTakeoffTriggered: boolean
@@ -36,6 +37,7 @@ export const INITIAL_CABIN_ANNOUNCEMENT_TRIGGER_STATE: CabinAnnouncementTriggerS
   lastBoardingWelcomeAtMs: null,
   armDoorsTriggered: false,
   engineSequenceTriggered: false,
+  crewSeatTakeoffTriggered: false,
   hasTakenOff: false,
   reachedMinimumAirborneHeight: false,
   afterTakeoffTriggered: false,
@@ -57,6 +59,7 @@ const TAKEOFF_ANNOUNCEMENT_ALTITUDE_FEET = 9_000
 const LANDING_CREW_ALTITUDE_AGL_FEET = 5_000
 const MINIMUM_REAL_FLIGHT_AGL_FEET = 200
 export const SAFETY_BRIEFING_DELAY_MS = 30_000
+export const CABIN_DIM_DELAY_MS = 5_000
 
 function isNight(timeOfDay: number | undefined): boolean {
   // SimConnect TIME OF DAY : 1 aube, 2 jour, 3 crépuscule, 4 nuit.
@@ -64,14 +67,24 @@ function isNight(timeOfDay: number | undefined): boolean {
 }
 
 function engineStartSequence(timeOfDay: number | undefined): CabinAnnouncementAction {
-  const sequence: CabinAnnouncementType[] = ['arm_doors', 'presafety_briefing', 'safety_briefing']
+  const sequence: CabinAnnouncementType[] = ['presafety_briefing', 'safety_briefing']
   if (isNight(timeOfDay)) sequence.push('cabin_dim_takeoff')
-  sequence.push('crew_seat_takeoff')
   return {
     kind: 'enqueue',
     types: sequence,
-    delayBefore: { type: 'safety_briefing', milliseconds: SAFETY_BRIEFING_DELAY_MS }
+    delaysBefore: {
+      safety_briefing: SAFETY_BRIEFING_DELAY_MS,
+      ...(isNight(timeOfDay) ? { cabin_dim_takeoff: CABIN_DIM_DELAY_MS } : {})
+    }
   }
+}
+
+function isGsxPushbackActive(telemetry: SimTelemetry): boolean {
+  return telemetry.gsxDepartureState === GSX_SERVICE_ACTIVE || telemetry.gsxPushbackFrozen === true
+}
+
+function takeoffLightsOn(telemetry: SimTelemetry): boolean {
+  return telemetry.strobeLightsOn || telemetry.landingLightsOn
 }
 
 export function evaluateCabinAnnouncementTriggers(
@@ -98,10 +111,17 @@ export function evaluateCabinAnnouncementTriggers(
       actions.push({ kind: 'enqueue', types: ['boarding_welcome'] })
       next.lastBoardingWelcomeAtMs = nowMs
     }
+    if (current.onGround && isGsxPushbackActive(current)) {
+      actions.push({ kind: 'enqueue', types: ['arm_doors'] })
+      next.armDoorsTriggered = true
+    }
     if (current.enginesRunning && current.onGround) {
       actions.push(engineStartSequence(current.timeOfDay))
-      next.armDoorsTriggered = true
       next.engineSequenceTriggered = true
+    }
+    if (current.onGround && takeoffLightsOn(current)) {
+      actions.push({ kind: 'enqueue', types: ['crew_seat_takeoff'] })
+      next.crewSeatTakeoffTriggered = true
     }
     return { actions, nextState: next }
   }
@@ -126,10 +146,21 @@ export function evaluateCabinAnnouncementTriggers(
   }
   next.boardingActive = boardingActive
 
+  const pushbackBegan = previous !== null && !isGsxPushbackActive(previous) && isGsxPushbackActive(current)
+  if (!state.armDoorsTriggered && pushbackBegan) {
+    actions.push({ kind: 'enqueue', types: ['arm_doors'] })
+    next.armDoorsTriggered = true
+  }
+
   if (!state.engineSequenceTriggered && !previous?.enginesRunning && current.enginesRunning) {
     actions.push(engineStartSequence(current.timeOfDay))
-    next.armDoorsTriggered = true
     next.engineSequenceTriggered = true
+  }
+
+  const takeoffLightsWereOn = previous !== null && takeoffLightsOn(previous)
+  if (!state.crewSeatTakeoffTriggered && current.onGround && !next.hasTakenOff && !takeoffLightsWereOn && takeoffLightsOn(current)) {
+    actions.push({ kind: 'enqueue', types: ['crew_seat_takeoff'] })
+    next.crewSeatTakeoffTriggered = true
   }
 
   if (previous?.onGround && !current.onGround) next.hasTakenOff = true

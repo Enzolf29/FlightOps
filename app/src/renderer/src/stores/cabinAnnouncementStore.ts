@@ -21,6 +21,7 @@ interface CabinAnnouncementState {
   flightId: number | null
   simconnectConnected: boolean
   automationReady: boolean
+  automaticAnnouncementsEnabled: boolean
   gsxDetected: boolean
   activeVoice: CabinActivePlayback | null
   activeMusic: CabinActivePlayback | null
@@ -30,6 +31,7 @@ interface CabinAnnouncementState {
   play: (type: CabinAnnouncementType) => void
   stop: (type: CabinAnnouncementType) => void
   stopAll: () => void
+  setAutomaticAnnouncementsEnabled: (enabled: boolean) => void
   registerControls: (controls: {
     play: (type: CabinAnnouncementType) => void
     stop: (type: CabinAnnouncementType) => void
@@ -48,6 +50,7 @@ export const useCabinAnnouncementStore = create<CabinAnnouncementState>((set) =>
   flightId: null,
   simconnectConnected: false,
   automationReady: false,
+  automaticAnnouncementsEnabled: true,
   gsxDetected: false,
   activeVoice: null,
   activeMusic: null,
@@ -57,6 +60,7 @@ export const useCabinAnnouncementStore = create<CabinAnnouncementState>((set) =>
   play: noOp,
   stop: noOp,
   stopAll: noOp,
+  setAutomaticAnnouncementsEnabled: (enabled) => set({ automaticAnnouncementsEnabled: enabled }),
   registerControls: (controls) => set(controls),
   publish: (status) => set(status)
 }))

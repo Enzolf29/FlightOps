@@ -2877,6 +2877,9 @@ button.danger,
 
 /* Télécommande des annonces dans le suivi en direct */
 .cabin-remote-open { border-color: color-mix(in srgb, var(--accent) 48%, var(--border-subtle)) !important; }
+.cabin-auto-toggle { min-width: 142px; font-size: 12px; }
+.cabin-auto-toggle--on { color: var(--status-on-time); border-color: color-mix(in srgb, var(--status-on-time) 55%, var(--border-subtle)) !important; background: color-mix(in srgb, var(--status-on-time) 8%, var(--bg-surface-raised)); }
+.cabin-auto-toggle--off { color: var(--text-muted); border-color: var(--border-subtle) !important; }
 .cabin-remote { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .cabin-remote-status { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 13px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-app); }
 .cabin-remote-status > div:not(.cabin-remote-connection) { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
