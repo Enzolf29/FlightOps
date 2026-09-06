@@ -32,7 +32,10 @@ interface FlightEventLogProps {
 export function FlightEventLog({ events }: FlightEventLogProps) {
   // Les anciennes sessions peuvent encore contenir les alertes opérationnelles désormais
   // supprimées. Elles restent dans les données historiques, mais ne sont plus affichées.
-  const visibleEvents = events.filter((event) => event.type !== 'operational_alert')
+  const lastTaxiInIndex = events.findLastIndex((event) => event.type === 'taxi_in')
+  const visibleEvents = events.filter((event, index) =>
+    event.type !== 'operational_alert' && (event.type !== 'taxi_in' || index === lastTaxiInIndex)
+  )
   if (visibleEvents.length === 0) {
     return <p className="empty-hint">Aucun évènement enregistré pour l’instant.</p>
   }

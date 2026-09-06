@@ -82,7 +82,11 @@ let touchdownStats: TouchdownStats | null = null
  * moteurs — le PIREP est déjà créé à ce moment-là. On garde cette capture "en attente" active même
  * après la désarmement du vol, pour compléter le PIREP dès que la coupure moteur survient enfin.
  */
-let pendingEngineStopCapture: { pirepId: number; engineStartIso: string | null } | null = null
+let pendingEngineStopCapture: {
+  pirepId: number
+  engineStartIso: string | null
+  lastLandingSimTimeIso: string | null
+} | null = null
 let pendingCaptureWasEnginesRunning = true
 /** Snapshot moteur par moteur au moment de la clôture du vol, pour continuer à loguer "Moteur N
  * coupé" pendant la capture "en attente" ci-dessus — sinon ces coupures tardives (après l'arrivée
@@ -322,6 +326,18 @@ function pushEvent(event: FlightEvent): void {
   for (const listener of eventListeners) listener(event)
 }
 
+function createTaxiInEvent(landingIso: string | null, enginesStoppedIso: string): FlightEvent | null {
+  if (!landingIso) return null
+  const taxiInMinutes = (new Date(enginesStoppedIso).getTime() - new Date(landingIso).getTime()) / 60000
+  if (!Number.isFinite(taxiInMinutes) || taxiInMinutes < 0) return null
+  return {
+    simTimeIso: enginesStoppedIso,
+    type: 'taxi_in',
+    severity: 'info',
+    message: `Roulage après atterrissage : ${formatDelayDuration(taxiInMinutes)}`
+  }
+}
+
 export function handleTelemetryTick(telemetry: SimTelemetry): void {
   // SimConnect reste connecté et peut continuer à publier des valeurs anciennes/transitoires dans
   // les menus MSFS. Ces ticks ne doivent ni créer d'évènement, ni arrêter un moteur, ni alimenter
@@ -358,6 +374,8 @@ export function handleTelemetryTick(telemetry: SimTelemetry): void {
           )
         : null
       updatePirepEngineStop(pendingEngineStopCapture.pirepId, telemetry.simZuluIso, telemetry.fuelTotalWeight, blockTimeMinutes)
+      const taxiInEvent = createTaxiInEvent(pendingEngineStopCapture.lastLandingSimTimeIso, telemetry.simZuluIso)
+      if (taxiInEvent) pendingEngineEvents.push(taxiInEvent)
       if (pendingEngineEvents.length > 0) {
         appendPirepEvents(pendingEngineStopCapture.pirepId, pendingEngineEvents)
       }
@@ -448,6 +466,8 @@ export function handleTelemetryTick(telemetry: SimTelemetry): void {
   }
 
   if (awaitingEngineShutdown && !telemetry.enginesRunning) {
+    const taxiInEvent = createTaxiInEvent(lastLandingSimTimeIso, telemetry.simZuluIso)
+    if (taxiInEvent) pushEvent(taxiInEvent)
     completeArmedFlight(telemetry.simZuluIso)
     return
   }
@@ -471,20 +491,10 @@ export function handleTelemetryTick(telemetry: SimTelemetry): void {
     actualDepartureIso = telemetry.simZuluIso
     setFlightStatus(armedFlightId, 'in_progress')
   } else if (transition === 'on_blocks') {
-    // Poussé avant completeArmedFlight() pour être inclus dans `events` au moment où le PIREP est créé.
-    if (lastLandingSimTimeIso) {
-      const taxiInMinutes = (new Date(telemetry.simZuluIso).getTime() - new Date(lastLandingSimTimeIso).getTime()) / 60000
-      if (taxiInMinutes >= 0) {
-        pushEvent({
-          simTimeIso: telemetry.simZuluIso,
-          type: 'taxi_in',
-          severity: 'info',
-          message: `Roulage après atterrissage : ${formatDelayDuration(taxiInMinutes)}`
-        })
-      }
-    }
     awaitingEngineShutdown = true
     if (!telemetry.enginesRunning) {
+      const taxiInEvent = createTaxiInEvent(lastLandingSimTimeIso, telemetry.simZuluIso)
+      if (taxiInEvent) pushEvent(taxiInEvent)
       completeArmedFlight(telemetry.simZuluIso)
       return
     }
@@ -580,7 +590,7 @@ function completeArmedFlight(actualArrivalIso: string): void {
     // Moteurs pas encore coupés à l'arrivée au parking (fréquent : le pilote finit ses vérifs
     // après s'être arrêté) — on continue de guetter la coupure pour compléter le PIREP après coup.
     if (engineStopIso === null) {
-      pendingEngineStopCapture = { pirepId, engineStartIso }
+      pendingEngineStopCapture = { pirepId, engineStartIso, lastLandingSimTimeIso }
       pendingCaptureWasEnginesRunning = true
       pendingEngineStates = lastTelemetry ? snapshotEngineStates(lastTelemetry) : null
       pendingEngineEvents = []

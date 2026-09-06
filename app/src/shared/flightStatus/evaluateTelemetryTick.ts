@@ -1,6 +1,6 @@
 import type { SimTelemetry } from '../types/simconnect'
 
-export type DetectorPhase = 'armed' | 'departed'
+export type DetectorPhase = 'armed' | 'departed' | 'arrived'
 
 export interface DetectorTickState {
   phase: DetectorPhase
@@ -41,6 +41,10 @@ export function evaluateTelemetryTick(
     return { transition: 'none', nextState: state }
   }
 
+  // Une arrivée confirmée est terminale : les ticks suivants ne doivent pas redéclencher
+  // `on_blocks` pendant que FlightOps attend la coupure du dernier moteur.
+  if (state.phase === 'arrived') return { transition: 'none', nextState: state }
+
   if (!state.airborneObserved) {
     if (!telemetry.onGround) {
       return { transition: 'none', nextState: { ...state, airborneObserved: true } }
@@ -56,7 +60,7 @@ export function evaluateTelemetryTick(
 
   const onBlocksStreak = state.onBlocksStreak + 1
   if (onBlocksStreak >= ON_BLOCKS_CONFIRM_TICKS) {
-    return { transition: 'on_blocks', nextState: state }
+    return { transition: 'on_blocks', nextState: { ...state, phase: 'arrived', onBlocksStreak } }
   }
   return { transition: 'none', nextState: { ...state, onBlocksStreak } }
 }

@@ -79,6 +79,15 @@ describe('evaluateTelemetryTick', () => {
       if (transition === 'on_blocks') break
     }
     expect(transition).toBe('on_blocks')
+    expect(state.phase).toBe('arrived')
+
+    const followingTick = evaluateTelemetryTick(state, {
+      onGround: true,
+      parkingBrakeSet: true,
+      groundVelocity: 0
+    })
+    expect(followingTick.transition).toBe('none')
+    expect(followingTick.nextState).toBe(state)
   })
 
   it('does not mistake a brief brake tap during taxi-in for arriving at the gate', () => {

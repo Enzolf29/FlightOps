@@ -1,6 +1,6 @@
 {
   "name": "flightops",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Logiciel de suivi de vols pour MSFS 2024",
   "main": "./out/main/index.js",
   "author": "FlightOps",
