@@ -2821,7 +2821,7 @@ button.danger,
 .tablet-settings-heading h2, .tablet-settings-heading p { margin-top: 0; }
 .tablet-server-badge { flex: 0 0 auto; padding: 7px 10px; border-radius: 999px; background: color-mix(in srgb, var(--status-cancelled) 13%, transparent); color: var(--status-cancelled); font-size: 11px; font-weight: 800; }
 .tablet-server-badge--online { background: color-mix(in srgb, var(--status-on-time) 13%, transparent); color: var(--status-on-time); }
-.tablet-pairing-grid { display: grid; grid-template-columns: minmax(190px, .55fr) minmax(0, 1.45fr); gap: 12px; margin-top: 15px; }
+.tablet-pairing-grid { display: block; margin-top: 15px; }
 .tablet-pin-card, .tablet-addresses { min-width: 0; padding: 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-app); }
 .tablet-pin-card { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
 .tablet-pin-card span, .tablet-addresses > span { color: var(--text-muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }

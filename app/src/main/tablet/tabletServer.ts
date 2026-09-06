@@ -1,4 +1,3 @@
-import { randomInt } from 'crypto'
 import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'http'
 import { createServer as createHttpsServer, type Server as HttpsServer } from 'https'
 import { networkInterfaces } from 'os'
@@ -49,7 +48,6 @@ let setupServer: HttpServer | null = null
 let port: number | null = null
 let setupPort: number | null = null
 let certificateBundle: TabletCertificateBundle | null = null
-let pin = String(randomInt(100_000, 1_000_000))
 let latestTelemetry: SimTelemetry | null = null
 let heartbeat: ReturnType<typeof setInterval> | null = null
 let unsubscribers: Array<() => void> = []
@@ -89,7 +87,6 @@ export function getTabletServerInfo(): TabletServerInfo {
   return {
     running: server?.listening === true,
     port,
-    pin,
     urls: localUrls('https', port),
     setupUrls: localUrls('http', setupPort),
     certificateFingerprint: certificateBundle?.caFingerprint ?? null,
@@ -198,10 +195,6 @@ function sendJson(response: ServerResponse, status: number, payload: unknown): v
   response.end(JSON.stringify(payload))
 }
 
-function isAuthorized(url: URL): boolean {
-  return url.searchParams.get('pin') === pin
-}
-
 async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
@@ -273,11 +266,6 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
   if (request.method === 'GET' && requestUrl.pathname === '/sw.js') {
     response.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-cache', 'service-worker-allowed': '/' })
     response.end(TABLET_SERVICE_WORKER)
-    return
-  }
-
-  if (!isAuthorized(requestUrl)) {
-    sendJson(response, 401, { error: 'Code d’appairage incorrect.' })
     return
   }
 
@@ -402,7 +390,6 @@ function listen(tabletServer: HttpServer | HttpsServer, requestedPort: number): 
 
 export async function startTabletServer(): Promise<void> {
   if (server) return
-  pin = String(randomInt(100_000, 1_000_000))
   certificateBundle = createTabletCertificate(localIpAddresses())
   const requestHandler = (request: IncomingMessage, response: ServerResponse): void => {
     void handleRequest(request, response).catch((error) => {

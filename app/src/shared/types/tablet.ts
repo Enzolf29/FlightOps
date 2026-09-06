@@ -8,7 +8,6 @@ import type { SimConnectStatus, SimTelemetry } from './simconnect'
 export interface TabletServerInfo {
   running: boolean
   port: number | null
-  pin: string
   /** Adresse HTTPS de la véritable PWA, après installation du certificat local. */
   urls: string[]
   /** Page HTTP utilisée une seule fois pour installer le certificat sur la tablette. */

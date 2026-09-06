@@ -166,11 +166,6 @@ function TabletCompanionSection() {
       </div>
 
       <div className="tablet-pairing-grid">
-        <div className="tablet-pin-card">
-          <span>Code d’appairage</span>
-          <strong>{info?.pin ?? '••••••'}</strong>
-          <small>Nouveau code à chaque lancement de FlightOps</small>
-        </div>
         <div className="tablet-addresses">
           <span>1. Installation sécurisée — adresse à ouvrir une seule fois</span>
           {info?.setupUrls.length ? info.setupUrls.map((url) => (
@@ -192,7 +187,7 @@ function TabletCompanionSection() {
         <span>① Gardez FlightOps ouvert</span>
         <span>② Installez le certificat via l’adresse HTTP</span>
         <span>③ Ouvrez ensuite l’adresse HTTPS</span>
-        <span>④ Installez la Web App et entrez le code</span>
+        <span>④ Installez la Web App : elle se connecte directement</span>
       </div>
       <p className="tablet-network-note">
         L’interface reste locale uniquement. L’installation du certificat est nécessaire une seule fois par tablette pour que le navigateur autorise la véritable PWA. Au premier lancement, Windows peut demander d’autoriser FlightOps sur les réseaux privés : acceptez.
