@@ -12,6 +12,7 @@ import {
   type FleetRouteMatch
 } from '@shared/realFlights/matchFleetAircraftToRoute'
 import { buildDispatchPrefillUrl } from '@shared/simbrief/buildDispatchPrefillUrl'
+import { getDefaultDepartureUtc } from '@shared/booking/getDefaultDepartureUtc'
 import { useAircraft } from '@renderer/hooks/useAircraft'
 import { useCompanies } from '@renderer/hooks/useCompanies'
 import {
@@ -402,6 +403,7 @@ function BookRealRouteModal({ route, company, onClose, onGenerated }: {
   onClose: () => void
   onGenerated: () => void
 }) {
+  const [defaultDeparture] = useState(() => getDefaultDepartureUtc())
   const { data: fleetAircraft } = useAircraft(company.id)
   const suggestFlightNumber = useSuggestFlightNumber()
   const rankedAircraft = useMemo(() => rankFleetAircraftForRoute(fleetAircraft ?? [], route), [fleetAircraft, route])
@@ -409,8 +411,8 @@ function BookRealRouteModal({ route, company, onClose, onGenerated }: {
   const [aircraftId, setAircraftId] = useState<number | null>(null)
   const [flightNumberDigits, setFlightNumberDigits] = useState('')
   const [suggestionTried, setSuggestionTried] = useState(false)
-  const [date, setDate] = useState('')
-  const [time, setTime] = useState('')
+  const [date, setDate] = useState(defaultDeparture.date)
+  const [time, setTime] = useState(defaultDeparture.time)
   const [generated, setGenerated] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const selectedAircraft = fleetAircraft?.find((item) => item.id === aircraftId) ?? null

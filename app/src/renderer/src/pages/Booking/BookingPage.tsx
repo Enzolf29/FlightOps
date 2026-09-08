@@ -7,6 +7,7 @@ import { CompanyPicker } from '@renderer/components/CompanyPicker'
 import { RealFlightsBrowser } from '@renderer/components/RealFlightsBrowser'
 import { buildDispatchPrefillUrl } from '@shared/simbrief/buildDispatchPrefillUrl'
 import { generateCallsign } from '@shared/callsign/generateCallsign'
+import { getDefaultDepartureUtc } from '@shared/booking/getDefaultDepartureUtc'
 import type { SimbriefOfp } from '@shared/types/simbrief'
 import type { FlightWithRelations } from '@shared/types/flight'
 
@@ -97,13 +98,14 @@ function ImportTab() {
 }
 
 function CreateTab({ onGenerated }: { onGenerated: () => void }) {
+  const [defaultDeparture] = useState(() => getDefaultDepartureUtc())
   const { data: companies } = useCompanies()
   const [companyId, setCompanyId] = useState<number | null>(null)
   const [aircraftId, setAircraftId] = useState<number | null>(null)
   const [departureIcao, setDepartureIcao] = useState('')
   const [arrivalIcao, setArrivalIcao] = useState('')
-  const [date, setDate] = useState('')
-  const [time, setTime] = useState('')
+  const [date, setDate] = useState(defaultDeparture.date)
+  const [time, setTime] = useState(defaultDeparture.time)
   const [error, setError] = useState<string | null>(null)
 
   const { data: aircraft } = useAircraft(companyId ?? undefined)
