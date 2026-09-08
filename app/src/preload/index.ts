@@ -75,7 +75,8 @@ const flightopsApi: FlightopsApi = {
     getApproachProfile: (id: number): Promise<PirepApproachProfilePoint[]> =>
       ipcRenderer.invoke(IPC.pireps.getApproachProfile, id),
     getEvents: (id: number): Promise<FlightEvent[]> => ipcRenderer.invoke(IPC.pireps.getEvents, id),
-    getTelemetrySamples: (id: number): Promise<PirepTelemetrySample[]> => ipcRenderer.invoke(IPC.pireps.getTelemetrySamples, id)
+    getTelemetrySamples: (id: number): Promise<PirepTelemetrySample[]> => ipcRenderer.invoke(IPC.pireps.getTelemetrySamples, id),
+    delete: (id: number): Promise<void> => ipcRenderer.invoke(IPC.pireps.delete, id)
   },
   flights: {
     list: (): Promise<FlightWithRelations[]> => ipcRenderer.invoke(IPC.flights.list),

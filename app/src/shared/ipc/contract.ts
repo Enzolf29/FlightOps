@@ -42,7 +42,8 @@ export const IPC = {
     getFlightPath: 'pireps:getFlightPath',
     getApproachProfile: 'pireps:getApproachProfile',
     getEvents: 'pireps:getEvents',
-    getTelemetrySamples: 'pireps:getTelemetrySamples'
+    getTelemetrySamples: 'pireps:getTelemetrySamples',
+    delete: 'pireps:delete'
   },
   flights: {
     list: 'flights:list',

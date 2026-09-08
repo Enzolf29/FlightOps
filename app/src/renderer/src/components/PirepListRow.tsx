@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { PirepWithFlight } from '@shared/types/pirep'
 import { CompanyLogo } from '@renderer/components/CompanyLogo'
 import { Badge } from '@renderer/components/Badge'
@@ -8,9 +9,10 @@ import { getAirportLabel } from '@shared/airports/airportNames'
 interface PirepListRowProps {
   pirep: PirepWithFlight
   onClick?: () => void
+  actions?: ReactNode
 }
 
-export function PirepListRow({ pirep, onClick }: PirepListRowProps) {
+export function PirepListRow({ pirep, onClick, actions }: PirepListRowProps) {
   const { flight } = pirep
 
   return (
@@ -27,6 +29,11 @@ export function PirepListRow({ pirep, onClick }: PirepListRowProps) {
       </div>
       {pirep.delayBucket ? (
         <Badge label={DELAY_BUCKET_LABEL[pirep.delayBucket]} variant={DELAY_BUCKET_VARIANT[pirep.delayBucket]} />
+      ) : null}
+      {actions ? (
+        <span className="fleet-table-actions" onClick={(event) => event.stopPropagation()}>
+          {actions}
+        </span>
       ) : null}
     </div>
   )

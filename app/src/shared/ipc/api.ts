@@ -60,6 +60,7 @@ export interface FlightopsApi {
     getApproachProfile: (id: number) => Promise<PirepApproachProfilePoint[]>
     getEvents: (id: number) => Promise<FlightEvent[]>
     getTelemetrySamples: (id: number) => Promise<PirepTelemetrySample[]>
+    delete: (id: number) => Promise<void>
   }
   flights: {
     list: () => Promise<FlightWithRelations[]>

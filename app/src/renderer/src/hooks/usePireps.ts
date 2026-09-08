@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 export function usePireps() {
   return useQuery({
@@ -48,5 +48,18 @@ export function usePirepTelemetrySamples(id: number) {
   return useQuery({
     queryKey: ['pireps', 'telemetrySamples', id],
     queryFn: () => window.flightops.pireps.getTelemetrySamples(id)
+  })
+}
+
+export function useDeletePirep() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => window.flightops.pireps.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pireps'] })
+      queryClient.invalidateQueries({ queryKey: ['home', 'dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['stats'] })
+      queryClient.invalidateQueries({ queryKey: ['fleet', 'aircraft'] })
+    }
   })
 }

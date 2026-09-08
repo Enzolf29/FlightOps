@@ -139,6 +139,24 @@ export function getPirepsByAircraft(aircraftId: number): PirepWithFlight[] {
   return rows.map(mapPirep)
 }
 
+/**
+ * Supprime le compte rendu et sa boîte noire, mais conserve le vol dans le calendrier. Le vol
+ * pourra ensuite être supprimé séparément si l'utilisateur souhaite aussi effacer la réservation.
+ */
+export function deletePirep(id: number): boolean {
+  return getDb().transaction(() => {
+    const row = getDb().prepare('SELECT flight_id FROM pireps WHERE id = ?').get(id) as
+      | { flight_id: number }
+      | undefined
+    if (!row) return false
+
+    getDb().prepare('DELETE FROM flight_telemetry_samples WHERE flight_id = ?').run(row.flight_id)
+    getDb().prepare('DELETE FROM flight_tracking_sessions WHERE flight_id = ?').run(row.flight_id)
+    getDb().prepare('DELETE FROM pireps WHERE id = ?').run(id)
+    return true
+  })()
+}
+
 /** Blobs volumineux volontairement exclus des requêtes ci-dessus, chargés à la demande sur la page de détail. */
 export function getPirepFlightPath(id: number): PirepFlightPathPoint[] {
   const row = getDb().prepare('SELECT flight_path_json FROM pireps WHERE id = ?').get(id) as

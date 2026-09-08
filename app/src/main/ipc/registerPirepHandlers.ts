@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { IPC } from '@shared/ipc/contract'
 import {
+  deletePirep,
   getAllPireps,
   getPirepApproachProfile,
   getPirepById,
@@ -18,4 +19,9 @@ export function registerPirepHandlers(): void {
   ipcMain.handle(IPC.pireps.getApproachProfile, (_event, id: number) => getPirepApproachProfile(id))
   ipcMain.handle(IPC.pireps.getEvents, (_event, id: number) => getPirepEvents(id))
   ipcMain.handle(IPC.pireps.getTelemetrySamples, (_event, id: number) => getPirepTelemetrySamples(id))
+  ipcMain.handle(IPC.pireps.delete, (_event, id: number) => {
+    if (!deletePirep(id)) {
+      throw new Error('PIREP introuvable.')
+    }
+  })
 }
