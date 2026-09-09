@@ -1,3 +1,6 @@
+import { app } from 'electron'
+import { join } from 'node:path'
+import * as regedit from 'regedit'
 import { open, Protocol } from 'node-simconnect'
 import type { SimConnectConnection } from 'node-simconnect'
 import type { SimConnectStatus, SimTelemetry } from '@shared/types/simconnect'
@@ -9,6 +12,15 @@ import { attachMetarClient } from './metarClient'
 const RECONNECT_DELAY_MS = 10_000
 const APP_NAME = 'FlightOps'
 const EVENT_SIM_STATE = 0xf101
+
+// node-simconnect lit le registre Windows via les scripts VBS de regedit. Dans l'application
+// emballée, electron-builder extrait ces scripts hors de app.asar afin que Windows Script Host
+// puisse les exécuter : il faut donc indiquer explicitement ce chemin réel à regedit.
+if (app.isPackaged) {
+  regedit.setExternalVBSLocation(
+    join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'regedit', 'vbs')
+  )
+}
 
 type StatusListener = (status: SimConnectStatus) => void
 type TelemetryListener = (telemetry: SimTelemetry) => void
