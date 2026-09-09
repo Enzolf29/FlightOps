@@ -9,9 +9,10 @@ import { getAirportLabel } from '@shared/airports/airportNames'
 interface FlightListRowProps {
   flight: FlightWithRelations
   actions?: ReactNode
+  departureTime?: string
 }
 
-export function FlightListRow({ flight, actions }: FlightListRowProps) {
+export function FlightListRow({ flight, actions, departureTime = flight.scheduledDeparture }: FlightListRowProps) {
   return (
     <div className="list-row">
       <CompanyLogo logoFilename={flight.company.logoFilename} icaoCode={flight.company.icaoCode} width={88} height={52} />
@@ -20,7 +21,7 @@ export function FlightListRow({ flight, actions }: FlightListRowProps) {
           {flight.callsignDisplay} · {getAirportLabel(flight.departureIcao)} → {getAirportLabel(flight.arrivalIcao)}
         </span>
         <span className="list-row-subtitle">
-          Vol {flight.flightNumber} · {flight.aircraft?.type ?? 'Avion non défini'} · {formatDateTime(flight.scheduledDeparture)}
+          Vol {flight.flightNumber} · {flight.aircraft?.type ?? 'Avion non défini'} · {formatDateTime(departureTime)}
         </span>
       </div>
       <Badge label={FLIGHT_STATUS_LABEL[flight.status]} variant={FLIGHT_STATUS_VARIANT[flight.status]} />

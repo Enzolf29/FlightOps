@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFlights, useCancelFlight, useDeleteFlight } from '@renderer/hooks/useFlights'
+import { usePireps } from '@renderer/hooks/usePireps'
 import { useArmedFlightId, useArmFlight } from '@renderer/hooks/useArmedFlight'
 import { CalendarMonth } from '@renderer/components/CalendarMonth'
 import { CalendarWeek } from '@renderer/components/CalendarWeek'
@@ -8,6 +9,7 @@ import { FlightListRow } from '@renderer/components/FlightListRow'
 import { parseUtc } from '@renderer/lib/format'
 import { dayKeyUtc } from '@renderer/lib/calendarGrid'
 import type { FlightStatus } from '@shared/types/flight'
+import { getCalendarDeparture } from '@shared/calendar/getCalendarDeparture'
 
 type StatusFilter = FlightStatus | 'all'
 type ViewMode = 'month' | 'week'
@@ -22,6 +24,7 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
 
 export function CalendarPage() {
   const { data: flights, isLoading } = useFlights()
+  const { data: pireps } = usePireps()
   const [viewMode, setViewMode] = useState<ViewMode>('week')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -34,6 +37,15 @@ export function CalendarPage() {
   const { data: armedFlightId } = useArmedFlightId()
   const navigate = useNavigate()
 
+  const actualDepartureByFlightId = useMemo(
+    () => new Map(
+      (pireps ?? [])
+        .filter((pirep) => Boolean(pirep.actualDepartureTime))
+        .map((pirep) => [pirep.flightId, pirep.actualDepartureTime as string])
+    ),
+    [pireps]
+  )
+
   const filtered = useMemo(() => {
     if (!flights) return []
     let result = flights
@@ -42,10 +54,12 @@ export function CalendarPage() {
     }
     if (selectedDate) {
       const key = dayKeyUtc(selectedDate)
-      result = result.filter((flight) => dayKeyUtc(parseUtc(flight.scheduledDeparture)) === key)
+      result = result.filter((flight) =>
+        dayKeyUtc(parseUtc(getCalendarDeparture(flight, actualDepartureByFlightId.get(flight.id)))) === key
+      )
     }
     return result
-  }, [flights, statusFilter, selectedDate])
+  }, [flights, statusFilter, selectedDate, actualDepartureByFlightId])
 
   function handleCancel(id: number) {
     setActionError(null)
@@ -86,9 +100,19 @@ export function CalendarPage() {
       </div>
 
       {viewMode === 'week' ? (
-        <CalendarWeek flights={flights} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+        <CalendarWeek
+          flights={flights}
+          actualDepartureByFlightId={actualDepartureByFlightId}
+          selectedDate={selectedDate}
+          onSelectDate={setSelectedDate}
+        />
       ) : (
-        <CalendarMonth flights={flights} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+        <CalendarMonth
+          flights={flights}
+          actualDepartureByFlightId={actualDepartureByFlightId}
+          selectedDate={selectedDate}
+          onSelectDate={setSelectedDate}
+        />
       )}
 
       <div className="fleet-toolbar calendar-list-toolbar">
@@ -119,6 +143,7 @@ export function CalendarPage() {
             <FlightListRow
               key={flight.id}
               flight={flight}
+              departureTime={getCalendarDeparture(flight, actualDepartureByFlightId.get(flight.id))}
               actions={
                 <>
                   {flight.status === 'upcoming' ? (

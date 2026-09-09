@@ -12,28 +12,30 @@ import {
   isTodayUtc,
   startOfMonthUtc
 } from '@renderer/lib/calendarGrid'
+import { getCalendarDeparture } from '@shared/calendar/getCalendarDeparture'
 
 interface CalendarMonthProps {
   flights: FlightWithRelations[]
+  actualDepartureByFlightId: ReadonlyMap<number, string>
   selectedDate: Date | null
   onSelectDate: (date: Date | null) => void
 }
 
 const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 
-export function CalendarMonth({ flights, selectedDate, onSelectDate }: CalendarMonthProps) {
+export function CalendarMonth({ flights, actualDepartureByFlightId, selectedDate, onSelectDate }: CalendarMonthProps) {
   const [cursor, setCursor] = useState(() => startOfMonthUtc(new Date()))
 
   const flightsByDay = useMemo(() => {
     const map = new Map<string, FlightWithRelations[]>()
     for (const flight of flights) {
-      const key = dayKeyUtc(parseUtc(flight.scheduledDeparture))
+      const key = dayKeyUtc(parseUtc(getCalendarDeparture(flight, actualDepartureByFlightId.get(flight.id))))
       const list = map.get(key) ?? []
       list.push(flight)
       map.set(key, list)
     }
     return map
-  }, [flights])
+  }, [flights, actualDepartureByFlightId])
 
   const grid = useMemo(() => getMonthGridUtc(cursor), [cursor])
 

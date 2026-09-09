@@ -7,31 +7,36 @@ import { Badge } from '@renderer/components/Badge'
 import { parseUtc, formatTime, formatFlightDuration } from '@renderer/lib/format'
 import { FLIGHT_STATUS_LABEL, FLIGHT_STATUS_VARIANT } from '@renderer/lib/labels'
 import { addWeeksUtc, dayKeyUtc, getWeekGridUtc, isTodayUtc, startOfWeekUtc } from '@renderer/lib/calendarGrid'
+import { getCalendarDeparture } from '@shared/calendar/getCalendarDeparture'
 
 interface CalendarWeekProps {
   flights: FlightWithRelations[]
+  actualDepartureByFlightId: ReadonlyMap<number, string>
   selectedDate: Date | null
   onSelectDate: (date: Date | null) => void
 }
 
 const WEEKDAY_LABELS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
 
-export function CalendarWeek({ flights, selectedDate, onSelectDate }: CalendarWeekProps) {
+export function CalendarWeek({ flights, actualDepartureByFlightId, selectedDate, onSelectDate }: CalendarWeekProps) {
   const [cursor, setCursor] = useState(() => startOfWeekUtc(new Date()))
 
   const flightsByDay = useMemo(() => {
     const map = new Map<string, FlightWithRelations[]>()
     for (const flight of flights) {
-      const key = dayKeyUtc(parseUtc(flight.scheduledDeparture))
+      const key = dayKeyUtc(parseUtc(getCalendarDeparture(flight, actualDepartureByFlightId.get(flight.id))))
       const list = map.get(key) ?? []
       list.push(flight)
       map.set(key, list)
     }
     for (const list of map.values()) {
-      list.sort((a, b) => parseUtc(a.scheduledDeparture).getTime() - parseUtc(b.scheduledDeparture).getTime())
+      list.sort((a, b) =>
+        parseUtc(getCalendarDeparture(a, actualDepartureByFlightId.get(a.id))).getTime() -
+        parseUtc(getCalendarDeparture(b, actualDepartureByFlightId.get(b.id))).getTime()
+      )
     }
     return map
-  }, [flights])
+  }, [flights, actualDepartureByFlightId])
 
   const grid = useMemo(() => getWeekGridUtc(cursor), [cursor])
 
@@ -82,7 +87,9 @@ export function CalendarWeek({ flights, selectedDate, onSelectDate }: CalendarWe
                       onClick={() => onSelectDate(selected ? null : day)}
                     >
                       <div className="calendar-week-flight-top">
-                        <span className="calendar-week-flight-time">{formatTime(flight.scheduledDeparture)}</span>
+                        <span className="calendar-week-flight-time">
+                          {formatTime(getCalendarDeparture(flight, actualDepartureByFlightId.get(flight.id)))}
+                        </span>
                         <Badge label={FLIGHT_STATUS_LABEL[flight.status]} variant={FLIGHT_STATUS_VARIANT[flight.status]} />
                       </div>
                       <div className="calendar-week-flight-company">

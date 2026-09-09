@@ -1,4 +1,4 @@
-import { format } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 
 export interface DispatchPrefillParams {
   originIcao: string
@@ -45,7 +45,7 @@ export function buildDispatchPrefillUrl(params: DispatchPrefillParams): string {
     url.searchParams.set('callsign', params.callsign)
   }
 
-  url.searchParams.set('date', format(params.scheduledDeparture, 'ddLLLyy').toUpperCase())
+  url.searchParams.set('date', formatInTimeZone(params.scheduledDeparture, 'UTC', 'ddLLLyy').toUpperCase())
   url.searchParams.set('deph', String(params.scheduledDeparture.getUTCHours()))
   url.searchParams.set('depm', String(params.scheduledDeparture.getUTCMinutes()))
 

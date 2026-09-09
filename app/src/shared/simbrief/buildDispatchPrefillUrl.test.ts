@@ -36,4 +36,20 @@ describe('buildDispatchPrefillUrl', () => {
     expect(url.searchParams.get('type')).toBe('A20N')
     expect(url.searchParams.get('reg')).toBe('F-HZUK')
   })
+
+  it('envoie la date UTC à SimBrief même lorsque le jour local est déjà le suivant', () => {
+    const url = new URL(
+      buildDispatchPrefillUrl({
+        originIcao: 'EDDH',
+        destIcao: 'EHAM',
+        aircraftIcaoType: 'B738',
+        airlineIcao: 'KLM',
+        scheduledDeparture: new Date('2026-09-08T22:30:00Z')
+      })
+    )
+
+    expect(url.searchParams.get('date')).toBe('08SEP26')
+    expect(url.searchParams.get('deph')).toBe('22')
+    expect(url.searchParams.get('depm')).toBe('30')
+  })
 })
