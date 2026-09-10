@@ -35,7 +35,7 @@ export interface SimTelemetry {
   gsxCargoBoardingPercent?: number
   /** L:var GSX activée pendant le repoussage. */
   gsxPushbackFrozen?: boolean
-  /** SimConnect TIME OF DAY : 1 aube, 2 jour, 3 crépuscule, 4 nuit. */
+  /** SimConnect TIME OF DAY : 0 aube, 1 jour, 2 crépuscule, 3 nuit. */
   timeOfDay?: number
   /** Température statique extérieure et température totale (avec effet de compression), en °C. */
   outsideAirTemperatureCelsius?: number

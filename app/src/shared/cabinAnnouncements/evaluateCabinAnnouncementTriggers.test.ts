@@ -33,7 +33,7 @@ function telemetry(overrides: Partial<SimTelemetry> = {}): SimTelemetry {
     gsxBoardingState: 0,
     gsxDepartureState: 0,
     gsxPushbackFrozen: false,
-    timeOfDay: 2,
+    timeOfDay: 1,
     airspeedIndicated: 0,
     groundVelocity: 0,
     verticalSpeed: 0,
@@ -82,9 +82,9 @@ describe('evaluateCabinAnnouncementTriggers', () => {
   })
 
   it('queues the night safety sequence at first engine start with delays after each briefing', () => {
-    const stopped = telemetry({ timeOfDay: 4 })
+    const stopped = telemetry({ timeOfDay: 3 })
     const initialized = step(null, stopped, INITIAL_CABIN_ANNOUNCEMENT_TRIGGER_STATE).nextState
-    const running = telemetry({ enginesRunning: true, engine1Running: true, timeOfDay: 4 })
+    const running = telemetry({ enginesRunning: true, engine1Running: true, timeOfDay: 3 })
     expect(step(stopped, running, initialized).actions).toEqual([
       {
         kind: 'enqueue',
@@ -95,6 +95,29 @@ describe('evaluateCabinAnnouncementTriggers', () => {
         }
       }
     ])
+  })
+
+  it('ajoute Cabin Dim au crépuscule mais jamais en plein jour', () => {
+    const daylight = telemetry({ timeOfDay: 1 })
+    const daylightState = step(null, daylight, INITIAL_CABIN_ANNOUNCEMENT_TRIGGER_STATE).nextState
+    const daylightRunning = telemetry({ enginesRunning: true, engine1Running: true, timeOfDay: 1 })
+    expect(step(daylight, daylightRunning, daylightState).actions).toEqual([{
+      kind: 'enqueue',
+      types: ['presafety_briefing', 'safety_briefing'],
+      delaysBefore: { safety_briefing: SAFETY_BRIEFING_DELAY_MS }
+    }])
+
+    const dusk = telemetry({ timeOfDay: 2 })
+    const duskState = step(null, dusk, INITIAL_CABIN_ANNOUNCEMENT_TRIGGER_STATE).nextState
+    const duskRunning = telemetry({ enginesRunning: true, engine1Running: true, timeOfDay: 2 })
+    expect(step(dusk, duskRunning, duskState).actions).toEqual([{
+      kind: 'enqueue',
+      types: ['presafety_briefing', 'safety_briefing', 'cabin_dim_takeoff'],
+      delaysBefore: {
+        safety_briefing: SAFETY_BRIEFING_DELAY_MS,
+        cabin_dim_takeoff: CABIN_DIM_DELAY_MS
+      }
+    }])
   })
 
   it('triggers arm doors when GSX pushback starts before the engines', () => {

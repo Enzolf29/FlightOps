@@ -62,8 +62,8 @@ export const SAFETY_BRIEFING_DELAY_MS = 30_000
 export const CABIN_DIM_DELAY_MS = 5_000
 
 function isNight(timeOfDay: number | undefined): boolean {
-  // SimConnect TIME OF DAY : 1 aube, 2 jour, 3 crépuscule, 4 nuit.
-  return timeOfDay === 3 || timeOfDay === 4
+  // MSFS 2024 TIME OF DAY : 0 aube, 1 jour, 2 crépuscule, 3 nuit.
+  return timeOfDay === 2 || timeOfDay === 3
 }
 
 function engineStartSequence(timeOfDay: number | undefined): CabinAnnouncementAction {
