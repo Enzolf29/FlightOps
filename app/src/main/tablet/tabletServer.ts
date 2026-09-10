@@ -16,6 +16,7 @@ import { computeEtaMinutes } from '@shared/flightStatus/computeEtaMinutes'
 import { computeFlightDistanceProgress } from '@shared/flightStatus/computeFlightDistanceProgress'
 import { buildLoadsheetComparison } from '@shared/simbrief/buildLoadsheetComparison'
 import { parseOfpDetail, type OfpDetail } from '@shared/simbrief/parseOfpDetail'
+import { parseBriefingHtml } from '@shared/simbrief/parseBriefingHtml'
 import { getAllFlights, getFlightOfpJson, getFlightWithRelationsById } from '../db/repositories/flightRepository'
 import { getStatus, onStatusChange, onTelemetry } from '../simconnect/connectionManager'
 import { requestMetar } from '../simconnect/metarClient'
@@ -28,6 +29,7 @@ import {
   onFlightEvent
 } from '../simconnect/flightStatusDetector'
 import { TABLET_PAGE_HTML } from './tabletPage'
+import { getCompanyBackgroundPng } from './tabletCompanyBackgrounds'
 import { requestOnlineAtis, type OnlineAtisNetwork } from './onlineAtisClient'
 import { createTabletCertificate, type TabletCertificateBundle } from './tabletCertificate'
 import {
@@ -43,6 +45,8 @@ const PREFERRED_SETUP_PORT = 8732
 const PREFERRED_HTTPS_PORT = 8733
 const MAX_BODY_BYTES = 16_384
 const MAX_TABLET_PATH_POINTS = 800
+const WEATHER_RATE_LIMIT_WINDOW_MS = 60_000
+const WEATHER_RATE_LIMIT_MAX_REQUESTS = 20
 
 type CabinCommandListener = (command: TabletCabinCommand) => void
 
@@ -70,6 +74,18 @@ const ofpCache = new Map<number, { raw: string | null; detail: OfpDetail | null 
 
 const streamClients = new Set<ServerResponse>()
 const cabinCommandListeners = new Set<CabinCommandListener>()
+const weatherRequestTimestamps = new Map<string, number[]>()
+
+/** Limite les appels /api/metar et /api/atis par appareil : ces routes relaient des services externes. */
+function isWeatherRateLimited(clientKey: string): boolean {
+  const now = Date.now()
+  const recentHits = (weatherRequestTimestamps.get(clientKey) ?? []).filter(
+    (timestamp) => now - timestamp < WEATHER_RATE_LIMIT_WINDOW_MS
+  )
+  recentHits.push(now)
+  weatherRequestTimestamps.set(clientKey, recentHits)
+  return recentHits.length > WEATHER_RATE_LIMIT_MAX_REQUESTS
+}
 
 function localIpAddresses(): string[] {
   const addresses = new Set<string>()
@@ -313,8 +329,37 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
     return
   }
 
+  const companyBackgroundMatch = /^\/company-background\/([A-Z0-9]{2,4})\.png$/.exec(requestUrl.pathname)
+  if (request.method === 'GET' && companyBackgroundMatch) {
+    const png = getCompanyBackgroundPng(companyBackgroundMatch[1])
+    if (!png) {
+      sendJson(response, 404, { error: 'Aucun fond d’écran pour cette compagnie.' })
+      return
+    }
+    response.writeHead(200, { 'content-type': 'image/png', 'content-length': png.length, 'cache-control': 'public, max-age=86400' })
+    response.end(png)
+    return
+  }
+
   if (request.method === 'GET' && requestUrl.pathname === '/api/snapshot') {
     sendJson(response, 200, buildSnapshot())
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/briefing') {
+    const flightId = Number(requestUrl.searchParams.get('flightId'))
+    if (!Number.isInteger(flightId)) {
+      sendJson(response, 400, { error: 'Identifiant de vol invalide.' })
+      return
+    }
+    // Le briefing texte complet (jusqu'à ~200 Ko) n'est jamais inclus dans le snapshot diffusé en
+    // continu : il n'est lu qu'à la demande, quand la tablette ouvre l'app Briefing.
+    const briefing = parseBriefingHtml(getFlightOfpJson(flightId))
+    if (!briefing) {
+      sendJson(response, 404, { error: 'Briefing SimBrief indisponible pour ce vol.' })
+      return
+    }
+    sendJson(response, 200, briefing)
     return
   }
 
@@ -338,6 +383,10 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
       sendJson(response, 400, { error: 'Code OACI invalide.' })
       return
     }
+    if (isWeatherRateLimited(request.socket.remoteAddress ?? 'unknown')) {
+      sendJson(response, 429, { error: 'Trop de requêtes météo, réessayez dans quelques secondes.' })
+      return
+    }
     try {
       sendJson(response, 200, { icao, metar: await requestMetar(icao) })
     } catch (error) {
@@ -355,6 +404,10 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
     }
     if (network !== 'vatsim' && network !== 'ivao') {
       sendJson(response, 400, { error: 'Réseau ATIS invalide.' })
+      return
+    }
+    if (isWeatherRateLimited(request.socket.remoteAddress ?? 'unknown')) {
+      sendJson(response, 429, { error: 'Trop de requêtes météo, réessayez dans quelques secondes.' })
       return
     }
     try {
@@ -511,6 +564,7 @@ export function stopTabletServer(): void {
   heartbeat = null
   for (const client of streamClients) client.end()
   streamClients.clear()
+  weatherRequestTimestamps.clear()
   server?.close()
   setupServer?.close()
   server = null

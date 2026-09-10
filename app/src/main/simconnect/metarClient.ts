@@ -1,6 +1,11 @@
 import type { SimConnectConnection, RecvWeatherObservation } from 'node-simconnect'
 
-const REQUEST_TIMEOUT_MS = 8000
+/**
+ * En dehors du mode "Live Weather" de MSFS, SimConnect ne répond jamais à une demande de METAR —
+ * ce n'est donc jamais "lent", juste silencieux. Un délai court suffit avant de basculer sur la
+ * source de secours, plutôt que de faire attendre l'utilisateur plusieurs secondes pour rien.
+ */
+const REQUEST_TIMEOUT_MS = 1500
 
 interface PendingRequest {
   resolve: (metar: string) => void

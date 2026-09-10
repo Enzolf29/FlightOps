@@ -341,8 +341,10 @@ function createTaxiInEvent(landingIso: string | null, enginesStoppedIso: string)
 export function handleTelemetryTick(telemetry: SimTelemetry): void {
   // SimConnect reste connecté et peut continuer à publier des valeurs anciennes/transitoires dans
   // les menus MSFS. Ces ticks ne doivent ni créer d'évènement, ni arrêter un moteur, ni alimenter
-  // les tendances opérationnelles d'un vol récupéré.
-  if (telemetry.simulationActive === false) return
+  // les tendances opérationnelles d'un vol récupéré. Idem pendant une pause : l'horloge Zulu du sim
+  // (simZuluIso) est alors figée, donc tout évènement confirmé pendant ce laps de temps serait
+  // horodaté avec l'heure gelée d'avant-pause plutôt qu'avec le moment réel de la confirmation.
+  if (telemetry.simulationActive === false || telemetry.simulationPaused === true) return
   lastTelemetry = telemetry
 
   // Capture "en attente" d'une coupure moteur survenue après la clôture d'un vol précédent —

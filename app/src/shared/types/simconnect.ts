@@ -4,6 +4,10 @@ export interface SimTelemetry {
   /** Vrai uniquement lorsqu'une session de vol MSFS est réellement en cours. SimConnect peut
    * rester connecté dans les menus, où aucune automatisation ne doit se déclencher. */
   simulationActive?: boolean
+  /** Vrai pendant une pause MSFS (Echap, pause active...). L'horloge Zulu du sim se fige durant
+   * une pause alors que SimConnect continue de délivrer des ticks en temps réel : sans cet indicateur,
+   * un évènement confirmé pendant une pause serait horodaté avec l'heure sim gelée d'avant-pause. */
+  simulationPaused?: boolean
   latitude: number
   longitude: number
   altitude: number

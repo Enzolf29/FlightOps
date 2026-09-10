@@ -10,6 +10,9 @@ files:
 asarUnpack:
   - '**/*.node'
   - '**/node_modules/regedit/**'
+extraResources:
+  - from: resources/tablet-backgrounds
+    to: tablet-backgrounds
 npmRebuild: false
 publish:
   provider: github

@@ -12,6 +12,7 @@ import { attachMetarClient } from './metarClient'
 const RECONNECT_DELAY_MS = 10_000
 const APP_NAME = 'FlightOps'
 const EVENT_SIM_STATE = 0xf101
+const EVENT_PAUSE_STATE = 0xf102
 
 // node-simconnect lit le registre Windows via les scripts VBS de regedit. Dans l'application
 // emballée, electron-builder extrait ces scripts hors de app.asar afin que Windows Script Host
@@ -33,6 +34,7 @@ let stopLandingPrecision: (() => void) | null = null
 let stopMetarClient: (() => void) | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let simulationActive = false
+let simulationPaused = false
 
 const statusListeners = new Set<StatusListener>()
 const telemetryListeners = new Set<TelemetryListener>()
@@ -81,12 +83,18 @@ function connect(): void {
       // déduire un vol chargé à partir de TITLE ou des L:vars GSX, qui gardent parfois d'anciennes
       // valeurs dans le shell de MSFS.
       connection.subscribeToSystemEvent(EVENT_SIM_STATE, 'Sim')
+      // L'horloge Zulu du sim (SimTelemetry.simZuluIso) se fige pendant une pause, alors que
+      // SimConnect continue de délivrer des ticks en temps réel : sans suivre "Pause", un
+      // évènement de vol confirmé pendant une pause (arrivée, coupure moteur...) serait horodaté
+      // avec l'heure sim gelée d'avant-pause plutôt qu'avec le moment réel de la confirmation.
+      connection.subscribeToSystemEvent(EVENT_PAUSE_STATE, 'Pause')
       connection.on('event', (event) => {
         if (event.clientEventId === EVENT_SIM_STATE) simulationActive = event.data === 1
+        if (event.clientEventId === EVENT_PAUSE_STATE) simulationPaused = event.data === 1
       })
 
       stopTelemetry = startTelemetryLoop(connection, (telemetry) => {
-        const telemetryWithSession = { ...telemetry, simulationActive }
+        const telemetryWithSession = { ...telemetry, simulationActive, simulationPaused }
         for (const listener of telemetryListeners) listener(telemetryWithSession)
       })
       stopLandingPrecision = startLandingPrecisionLoop(connection, (sample) => {
@@ -107,6 +115,7 @@ function connect(): void {
 
 function handleDisconnect(): void {
   simulationActive = false
+  simulationPaused = false
   if (stopTelemetry) {
     stopTelemetry()
     stopTelemetry = null
