@@ -1,5 +1,6 @@
 import { getDb } from '../index'
 import type { RealRoute, RealRouteAircraft, RealRouteSource } from '@shared/types/realFlights'
+import { normalizeRealFlightAircraftFamily } from '@shared/realFlights/normalizeRealFlightAircraftFamily'
 
 interface RealRouteRow {
   id: number
@@ -40,11 +41,19 @@ function getAircraftForRoute(routeId: number): RealRouteAircraft[] {
        ORDER BY observation_count DESC, a.type_description ASC`
     )
     .all(routeId) as Array<{ icao_type: string; type_description: string; observation_count: number }>
-  return rows.map((row) => ({
-    icaoType: row.icao_type,
-    typeDescription: row.type_description,
-    observationCount: row.observation_count
-  }))
+  const grouped = new Map<string, RealRouteAircraft>()
+  for (const row of rows) {
+    const normalized = normalizeRealFlightAircraftFamily(row.icao_type, row.type_description)
+    if (!normalized) continue
+    const current = grouped.get(normalized.icaoType)
+    grouped.set(normalized.icaoType, {
+      ...normalized,
+      observationCount: (current?.observationCount ?? 0) + row.observation_count
+    })
+  }
+  return [...grouped.values()].sort(
+    (a, b) => b.observationCount - a.observationCount || a.typeDescription.localeCompare(b.typeDescription)
+  )
 }
 
 function mapRoute(row: RealRouteRow): RealRoute {
@@ -99,7 +108,8 @@ function mergeAircraft(routeId: number, aircraft: Array<Pick<RealRouteAircraft, 
        ON CONFLICT(real_route_id, icao_type) DO UPDATE SET type_description = excluded.type_description`
     )
     for (const item of aircraft) {
-      stmt.run(routeId, item.icaoType, item.typeDescription)
+      const normalized = normalizeRealFlightAircraftFamily(item.icaoType, item.typeDescription)
+      if (normalized) stmt.run(routeId, normalized.icaoType, normalized.typeDescription)
     }
   })
   run()
@@ -113,7 +123,8 @@ function addObservations(routeId: number, observations: RealRouteObservationInpu
   )
   const run = getDb().transaction(() => {
     for (const observation of observations) {
-      insert.run(routeId, observation.key, observation.aircraftIcaoType, observation.observedAt, inferred ? 1 : 0)
+      const normalizedType = normalizeRealFlightAircraftFamily(observation.aircraftIcaoType)?.icaoType ?? null
+      insert.run(routeId, observation.key, normalizedType, observation.observedAt, inferred ? 1 : 0)
     }
   })
   run()

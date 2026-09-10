@@ -56,6 +56,20 @@ describe('fleet aircraft matching for real routes', () => {
     expect(getFleetRouteMatch(aircraft({ simbriefIcaoCode: 'A320' }), route)).toBe('incompatible')
   })
 
+  it('considère les variantes E175/E195 comme leur famille E170/E190', () => {
+    const e170Route = {
+      ...route,
+      aircraft: [{ icaoType: 'E170', typeDescription: 'Embraer 170', observationCount: 2 }]
+    }
+    const e190Route = {
+      ...route,
+      aircraft: [{ icaoType: 'E190', typeDescription: 'Embraer 190', observationCount: 2 }]
+    }
+
+    expect(getFleetRouteMatch(aircraft({ simbriefIcaoCode: 'E175', type: 'Embraer 175' }), e170Route)).toBe('positioned')
+    expect(getFleetRouteMatch(aircraft({ simbriefIcaoCode: 'E195', type: 'Embraer 195' }), e190Route)).toBe('positioned')
+  })
+
   it('ranks positioned aircraft before compatible aircraft elsewhere and incompatible aircraft', () => {
     const elsewhere = aircraft({ id: 2, registration: 'F-HZUB', lastKnownIcao: 'LFRS' })
     const incompatible = aircraft({ id: 3, registration: 'F-GKXA', simbriefIcaoCode: 'A320' })

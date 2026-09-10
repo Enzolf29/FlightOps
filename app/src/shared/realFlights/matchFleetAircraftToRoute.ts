@@ -1,4 +1,5 @@
 import { guessIcaoTypeFromModelName } from '../aircraft/guessIcaoTypeFromModelName'
+import { normalizeRealFlightAircraftFamily } from './normalizeRealFlightAircraftFamily'
 import type { AircraftWithStats } from '../types/aircraft'
 import type { RealRoute } from '../types/realFlights'
 
@@ -17,7 +18,13 @@ export function getFleetAircraftIcaoType(aircraft: AircraftWithStats): string | 
 
 export function getFleetRouteMatch(aircraft: AircraftWithStats, route: RealRoute): FleetRouteMatch {
   const fleetType = getFleetAircraftIcaoType(aircraft)
-  if (!fleetType || !route.aircraft.some((item) => item.icaoType.trim().toUpperCase() === fleetType)) {
+  const fleetFamily = normalizeRealFlightAircraftFamily(fleetType, aircraft.type)?.icaoType ?? null
+  if (
+    !fleetFamily ||
+    !route.aircraft.some(
+      (item) => normalizeRealFlightAircraftFamily(item.icaoType, item.typeDescription)?.icaoType === fleetFamily
+    )
+  ) {
     return 'incompatible'
   }
   return aircraft.lastKnownIcao?.trim().toUpperCase() === route.departureIcao.trim().toUpperCase()

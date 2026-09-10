@@ -3,6 +3,7 @@ import { IPC } from '@shared/ipc/contract'
 import type { RealRoute, RealRouteSearchResult } from '@shared/types/realFlights'
 import { extractFlightNumberFromCallsign } from '@shared/aviation/extractFlightNumberFromCallsign'
 import { describeAircraftType } from '@shared/aircraft/describeAircraftType'
+import { normalizeRealFlightAircraftFamily } from '@shared/realFlights/normalizeRealFlightAircraftFamily'
 import { getCompanyById } from '../db/repositories/companyRepository'
 import { getPilot } from '../db/repositories/pilotRepository'
 import {
@@ -24,9 +25,13 @@ const MAX_COMPANY_REFRESH_AIRPORTS = 5
 function makeObservation(departure: AerodataboxDeparture): RealRouteObservationInput {
   const observedAt = departure.scheduledDepartureUtc ?? departure.scheduledArrivalUtc ?? new Date().toISOString()
   const identity = departure.flightNumber ?? departure.callSign ?? departure.aircraftRegistration ?? 'vol-inconnu'
+  const normalizedAircraft = normalizeRealFlightAircraftFamily(
+    departure.aircraftIcaoType,
+    departure.aircraftTypeDescription
+  )
   return {
     key: `${identity}|${departure.arrivalIcao ?? '----'}|${observedAt}`,
-    aircraftIcaoType: departure.aircraftIcaoType,
+    aircraftIcaoType: normalizedAircraft?.icaoType ?? null,
     observedAt
   }
 }
@@ -112,8 +117,12 @@ async function searchRealRoutes(
         flightNumbers: new Set(),
         observations: []
       }
-    if (departure.aircraftTypeDescription) {
-      entry.aircraft.set(departure.aircraftIcaoType ?? departure.aircraftTypeDescription, departure.aircraftTypeDescription)
+    const normalizedAircraft = normalizeRealFlightAircraftFamily(
+      departure.aircraftIcaoType,
+      departure.aircraftTypeDescription
+    )
+    if (normalizedAircraft) {
+      entry.aircraft.set(normalizedAircraft.icaoType, normalizedAircraft.typeDescription)
     }
     if (departure.scheduledDepartureUtc && departure.scheduledArrivalUtc) {
       const minutes = (Date.parse(departure.scheduledArrivalUtc) - Date.parse(departure.scheduledDepartureUtc)) / 60000
