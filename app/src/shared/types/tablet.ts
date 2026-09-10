@@ -47,6 +47,14 @@ export interface TabletAverageWind {
   speedKt: number
 }
 
+export interface TabletAirportSummary {
+  icaoCode: string
+  name: string | null
+  planRunway: string | null
+  metar: string | null
+  taf: string | null
+}
+
 export interface TabletOfpSummary {
   route: string | null
   sidIdent: string | null
@@ -60,12 +68,16 @@ export interface TabletOfpSummary {
   climbAvgWind: TabletAverageWind | null
   cruiseAvgWind: TabletAverageWind | null
   descentAvgWind: TabletAverageWind | null
+  origin: TabletAirportSummary | null
+  destination: TabletAirportSummary | null
   routePath: Array<{ lat: number; lon: number }>
   alternateIcao: string | null
   alternateRoute: string | null
   alternateCruiseAltitudeFeet: number | null
   alternateDistanceNm: number | null
   alternateEteMinutes: number | null
+  alternateBurn: number | null
+  briefingPdfUrl: string | null
 }
 
 export interface TabletLoadsheet {
@@ -87,6 +99,10 @@ export interface TabletSnapshot {
   availableFlights: FlightWithRelations[]
   calendarFlights: TabletCalendarFlight[]
   telemetry: SimTelemetry | null
+  /** Progression géographique réelle entre le départ et l'arrivée, de 0 à 1. */
+  flightProgress: number | null
+  /** Heure d'arrivée estimée à partir de la position et de la vitesse sol actuelles. */
+  estimatedArrivalIso: string | null
   events: FlightEvent[]
   path: PirepFlightPathPoint[]
   cabin: TabletCabinStatus

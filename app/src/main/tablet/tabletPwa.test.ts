@@ -41,6 +41,33 @@ describe('tablet PWA assets', () => {
     expect(TABLET_PAGE_HTML).toContain('stroke="#397cff"')
   })
 
+  it('keeps the flight information app split into the six EFB panels', () => {
+    expect(TABLET_PAGE_HTML).toContain('id="flightops-sheet"')
+    expect(TABLET_PAGE_HTML).toContain('id="flightops-flight"')
+    expect(TABLET_PAGE_HTML).toContain('id="flightops-plan"')
+    expect(TABLET_PAGE_HTML).toContain('id="flightops-load"')
+    expect(TABLET_PAGE_HTML).toContain('id="flightops-origin"')
+    expect(TABLET_PAGE_HTML).toContain('id="flightops-destination"')
+    expect(TABLET_PAGE_HTML).toContain('id="flightops-routing"')
+  })
+
+  it('shows live progress and refreshable online weather in the EFB views', () => {
+    expect(TABLET_PAGE_HTML).toContain('class="dash-progress-aircraft"')
+    expect(TABLET_PAGE_HTML).toContain('ETA estimée')
+    expect(TABLET_PAGE_HTML).toContain('data-ops-refresh=')
+    expect(TABLET_PAGE_HTML).toContain('data-ops-network=')
+    expect(TABLET_PAGE_HTML).toContain('ATIS EN LIGNE')
+  })
+
+  it('uses a combined weather app and a flight list with popup briefings', () => {
+    expect(TABLET_PAGE_HTML).toContain('id="weather-atis-result"')
+    expect(TABLET_PAGE_HTML).toContain('data-weather-atis-network="vatsim"')
+    expect(TABLET_PAGE_HTML).toContain('id="tablet-flight-list"')
+    expect(TABLET_PAGE_HTML).toContain('data-flight-briefing=')
+    expect(TABLET_PAGE_HTML).toContain("reste '+remaining")
+    expect(TABLET_PAGE_HTML).not.toContain('id="calendar-week"')
+  })
+
   it('keeps the embedded tablet application script syntactically valid', () => {
     const script = TABLET_PAGE_HTML.match(/<script>([\s\S]*)<\/script>/)?.[1]
     expect(script).toBeTruthy()

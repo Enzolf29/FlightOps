@@ -12,6 +12,8 @@ import type {
   TabletSnapshot
 } from '@shared/types/tablet'
 import type { SimTelemetry } from '@shared/types/simconnect'
+import { computeEtaMinutes } from '@shared/flightStatus/computeEtaMinutes'
+import { computeFlightDistanceProgress } from '@shared/flightStatus/computeFlightDistanceProgress'
 import { buildLoadsheetComparison } from '@shared/simbrief/buildLoadsheetComparison'
 import { parseOfpDetail, type OfpDetail } from '@shared/simbrief/parseOfpDetail'
 import { getAllFlights, getFlightOfpJson, getFlightWithRelationsById } from '../db/repositories/flightRepository'
@@ -26,6 +28,7 @@ import {
   onFlightEvent
 } from '../simconnect/flightStatusDetector'
 import { TABLET_PAGE_HTML } from './tabletPage'
+import { requestOnlineAtis, type OnlineAtisNetwork } from './onlineAtisClient'
 import { createTabletCertificate, type TabletCertificateBundle } from './tabletCertificate'
 import {
   buildTabletSetupHtml,
@@ -138,6 +141,20 @@ function toTabletOfp(detail: OfpDetail | null, includeRoutePath = true): TabletO
     climbAvgWind: detail.climbAvgWind,
     cruiseAvgWind: detail.cruiseAvgWind,
     descentAvgWind: detail.descentAvgWind,
+    origin: detail.origin ? {
+      icaoCode: detail.origin.icaoCode,
+      name: detail.origin.name,
+      planRunway: detail.origin.planRunway,
+      metar: detail.origin.metar,
+      taf: detail.origin.taf
+    } : null,
+    destination: detail.destination ? {
+      icaoCode: detail.destination.icaoCode,
+      name: detail.destination.name,
+      planRunway: detail.destination.planRunway,
+      metar: detail.destination.metar,
+      taf: detail.destination.taf
+    } : null,
     // Les extrémités sont ajoutées explicitement : certains OFP ne répètent pas l'aéroport dans le
     // navlog, ce qui faisait disparaître la carte tablette avant le deuxième point réellement volé.
     routePath,
@@ -145,7 +162,9 @@ function toTabletOfp(detail: OfpDetail | null, includeRoutePath = true): TabletO
     alternateRoute: detail.alternateRoute,
     alternateCruiseAltitudeFeet: detail.alternateCruiseAltitudeFeet,
     alternateDistanceNm: detail.alternateDistanceNm,
-    alternateEteMinutes: detail.alternateEteMinutes
+    alternateEteMinutes: detail.alternateEteMinutes,
+    alternateBurn: detail.alternateBurn,
+    briefingPdfUrl: detail.briefingPdfUrl
   }
 }
 
@@ -165,6 +184,29 @@ function buildSnapshot(): TabletSnapshot {
   const telemetry = latestTelemetry
     ? (({ diagnostics: _diagnostics, ...safeTelemetry }) => safeTelemetry)(latestTelemetry)
     : null
+  const canLocateFlight = Boolean(activeDetail?.origin && activeDetail.destination && telemetry)
+  const flightProgress = canLocateFlight
+    ? computeFlightDistanceProgress(
+        activeDetail!.origin!.lat,
+        activeDetail!.origin!.lon,
+        activeDetail!.destination!.lat,
+        activeDetail!.destination!.lon,
+        telemetry!.latitude,
+        telemetry!.longitude
+      )
+    : null
+  const etaMinutes = canLocateFlight
+    ? computeEtaMinutes(
+        telemetry!.latitude,
+        telemetry!.longitude,
+        activeDetail!.destination!.lat,
+        activeDetail!.destination!.lon,
+        telemetry!.groundVelocity
+      )
+    : null
+  const estimatedArrivalIso = etaMinutes === null
+    ? null
+    : new Date(new Date(telemetry!.simZuluIso).getTime() + etaMinutes * 60_000).toISOString()
 
   return {
     generatedAt: new Date().toISOString(),
@@ -174,6 +216,8 @@ function buildSnapshot(): TabletSnapshot {
     availableFlights,
     calendarFlights,
     telemetry,
+    flightProgress,
+    estimatedArrivalIso,
     events: getFlightEvents().filter((event) => event.type !== 'operational_alert'),
     path: downsamplePath(getLiveFlightPath()),
     cabin: cabinStatus,
@@ -298,6 +342,25 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
       sendJson(response, 200, { icao, metar: await requestMetar(icao) })
     } catch (error) {
       sendJson(response, 502, { error: error instanceof Error ? error.message : 'METAR indisponible.' })
+    }
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/atis') {
+    const icao = (requestUrl.searchParams.get('icao') ?? '').trim().toUpperCase()
+    const network = (requestUrl.searchParams.get('network') ?? '').trim().toLowerCase()
+    if (!/^[A-Z0-9]{4}$/.test(icao)) {
+      sendJson(response, 400, { error: 'Code OACI invalide.' })
+      return
+    }
+    if (network !== 'vatsim' && network !== 'ivao') {
+      sendJson(response, 400, { error: 'Réseau ATIS invalide.' })
+      return
+    }
+    try {
+      sendJson(response, 200, await requestOnlineAtis(network as OnlineAtisNetwork, icao))
+    } catch (error) {
+      sendJson(response, 502, { error: error instanceof Error ? error.message : 'ATIS indisponible.' })
     }
     return
   }
