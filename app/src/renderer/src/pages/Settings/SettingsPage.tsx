@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { ThemeToggle } from '@renderer/components/ThemeToggle'
 import { useSimbriefUserId, useSetSimbriefUserId } from '@renderer/hooks/useSimbriefUserId'
 import { useAerodataboxApiKey, useSetAerodataboxApiKey } from '@renderer/hooks/useAerodataboxApiKey'
+import { useAppUpdateStatus } from '@renderer/hooks/useAppUpdate'
 import { CabinAnnouncementsSettings } from '@renderer/components/CabinAnnouncementsSettings'
+import { ChangelogModal } from '@renderer/components/ChangelogModal'
 import type { TabletServerInfo } from '@shared/types/tablet'
-import type { AppUpdateStatus } from '@shared/types/appUpdate'
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'general' | 'cabin'>('general')
@@ -81,12 +82,8 @@ export function SettingsPage() {
 }
 
 function AppUpdateSection() {
-  const [status, setStatus] = useState<AppUpdateStatus | null>(null)
-
-  useEffect(() => {
-    void window.flightops.updates.getStatus().then(setStatus)
-    return window.flightops.updates.onStatusChange(setStatus)
-  }, [])
+  const status = useAppUpdateStatus()
+  const [showChangelog, setShowChangelog] = useState(false)
 
   const busy = status?.phase === 'checking' || status?.phase === 'downloading' || status?.phase === 'available'
   const progress = status?.downloadPercent ?? 0
@@ -108,15 +105,20 @@ function AppUpdateSection() {
           <strong>{status?.message ?? 'Chargement de l’état…'}</strong>
           {status?.availableVersion ? <small>Nouvelle version : {status.availableVersion}</small> : null}
         </div>
-        {status?.phase === 'downloaded' ? (
-          <button type="button" className="primary" onClick={() => window.flightops.updates.install()}>
-            Redémarrer et installer
+        <div className="update-status-actions">
+          <button type="button" onClick={() => setShowChangelog(true)}>
+            Changelog
           </button>
-        ) : (
-          <button type="button" disabled={busy || status?.phase === 'disabled'} onClick={() => window.flightops.updates.check()}>
-            {busy ? 'Vérification…' : 'Vérifier maintenant'}
-          </button>
-        )}
+          {status?.phase === 'downloaded' ? (
+            <button type="button" className="primary" onClick={() => window.flightops.updates.install()}>
+              Redémarrer et installer
+            </button>
+          ) : (
+            <button type="button" disabled={busy || status?.phase === 'disabled'} onClick={() => window.flightops.updates.check()}>
+              {busy ? 'Vérification…' : 'Vérifier maintenant'}
+            </button>
+          )}
+        </div>
       </div>
       {status?.phase === 'downloading' || status?.phase === 'available' ? (
         <div className="update-progress" aria-label={`Téléchargement ${Math.round(progress)} %`}>
@@ -124,6 +126,10 @@ function AppUpdateSection() {
         </div>
       ) : null}
       <p className="update-preserve-note">Une mise à jour conserve la flotte, les vols, les PIREPs, les réglages et les annonces cabine stockés sur ce PC.</p>
+
+      {showChangelog ? (
+        <ChangelogModal version={status?.currentVersion ?? '—'} onClose={() => setShowChangelog(false)} />
+      ) : null}
     </section>
   )
 }

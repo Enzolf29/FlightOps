@@ -90,6 +90,7 @@ export const IPC = {
     getStatus: 'updates:getStatus',
     check: 'updates:check',
     install: 'updates:install',
+    getChangelog: 'updates:getChangelog',
     statusChanged: 'updates:statusChanged'
   },
   app: {

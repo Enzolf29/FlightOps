@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Récupérer le dépôt
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Installer Node.js
         uses: actions/setup-node@v4
@@ -64,9 +66,24 @@ jobs:
           if (-not ($assets.Name -contains 'latest.yml')) {
             throw 'latest.yml est absent : la mise à jour automatique ne pourrait pas fonctionner.'
           }
+
+          # Le dépôt ne passe pas par des PR (push direct), donc `gh release --generate-notes`
+          # (qui liste les PR mergées) ne produit rien d'utile : on construit les notes à partir
+          # des messages de commit depuis le tag précédent, affichés dans le popup Changelog de
+          # l'appli.
+          $previousTag = git describe --tags --abbrev=0 "$($env:GITHUB_REF_NAME)^" 2>$null
+          if ($LASTEXITCODE -ne 0 -or -not $previousTag) {
+            $notes = "## What's Changed`nPremière version publiée."
+          } else {
+            $commits = git log "$previousTag..$($env:GITHUB_REF_NAME)" --pretty=format:"- %s" --no-merges
+            $notes = if ($commits) { "## What's Changed`n" + ($commits -join "`n") } else { "## What's Changed`nAucun changement de code depuis $previousTag." }
+          }
+          $notesFile = New-TemporaryFile
+          Set-Content -Path $notesFile -Value $notes -Encoding utf8
+
           gh release view $env:GITHUB_REF_NAME 2>$null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $env:GITHUB_REF_NAME $assets.FullName --clobber
           } else {
-            gh release create $env:GITHUB_REF_NAME $assets.FullName --verify-tag --generate-notes --title "FlightOps $env:GITHUB_REF_NAME"
+            gh release create $env:GITHUB_REF_NAME $assets.FullName --verify-tag --notes-file $notesFile --title "FlightOps $env:GITHUB_REF_NAME"
           }

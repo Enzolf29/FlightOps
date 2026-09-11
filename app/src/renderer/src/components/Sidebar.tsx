@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useThemeStore } from '@renderer/stores/themeStore'
+import { useAppUpdateStatus } from '@renderer/hooks/useAppUpdate'
 import {
   MoonIcon,
   SunIcon,
@@ -26,9 +27,13 @@ const NAV_ITEMS = [
   { to: '/economie', label: 'Économie', icon: DollarSignIcon }
 ]
 
+const OUTDATED_PHASES = new Set(['available', 'downloading', 'downloaded'])
+
 export function Sidebar() {
   const theme = useThemeStore((state) => state.theme)
   const setTheme = useThemeStore((state) => state.setTheme)
+  const updateStatus = useAppUpdateStatus()
+  const isOutdated = updateStatus ? OUTDATED_PHASES.has(updateStatus.phase) : false
 
   return (
     <aside className="sidebar">
@@ -38,6 +43,11 @@ export function Sidebar() {
         </span>
         FlightOps
       </div>
+      {isOutdated ? (
+        <NavLink to="/parametres" className="sidebar-update-warning" title="Une nouvelle version est disponible">
+          Mise à jour disponible
+        </NavLink>
+      ) : null}
 
       <nav className="sidebar-nav">
         {NAV_ITEMS.map((item) => (
