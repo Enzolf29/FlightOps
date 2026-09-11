@@ -6,6 +6,7 @@ import { Badge } from '@renderer/components/Badge'
 import { StatGrid } from '@renderer/components/StatGrid'
 import { LiveMap } from '@renderer/components/LiveMap'
 import { FlightEventLog } from '@renderer/components/FlightEventLog'
+import { GsxReceiptsPanel } from '@renderer/components/GsxReceiptsPanel'
 import {
   ArrowUpDownIcon,
   ClockIcon,
@@ -20,6 +21,7 @@ import { formatDateTime, formatHours, parseUtc } from '@renderer/lib/format'
 import { DELAY_BUCKET_LABEL, DELAY_BUCKET_VARIANT } from '@renderer/lib/labels'
 import { formatDelayDuration } from '@shared/flightStatus/formatDelayDuration'
 import { usePirepApproachProfile, usePirepEvents, usePirepFlightPath, usePirepTelemetrySamples } from '@renderer/hooks/usePireps'
+import { useGsxReceipts } from '@renderer/hooks/useGsxReceipts'
 import { useOfpDetail } from '@renderer/hooks/useOfpDetail'
 import { PirepReplay } from './PirepReplay'
 import { analyzePirepTelemetry, scoreComfort, scoreFuel, scoreLanding, scorePunctuality } from '@shared/flightStatus/analyzePirepTelemetry'
@@ -52,6 +54,7 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
   const { data: events } = usePirepEvents(pirep.id)
   const { data: telemetrySamples } = usePirepTelemetrySamples(pirep.id)
   const { data: ofp } = useOfpDetail(flight.id, flight.source === 'simbrief')
+  const { data: gsxReceipts, isLoading: gsxReceiptsLoading } = useGsxReceipts(flight.id, pirep.engineStopTime, true)
 
   const approachChartData = (approachProfile ?? []).map((point) => ({
     time: formatInTimeZone(parseUtc(point.timeIso), 'UTC', 'HH:mm:ss'),
@@ -320,6 +323,8 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
           ]}
         />
       </section>
+
+      <GsxReceiptsPanel receipts={gsxReceipts ?? []} isLoading={gsxReceiptsLoading} sectionClassName="pirep-detail-section" />
 
       <section className="pirep-detail-section">
         <h3>Journal d’évènements</h3>

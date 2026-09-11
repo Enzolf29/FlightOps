@@ -1,3 +1,5 @@
+import type { GsxCostStats } from './gsxReceipt'
+
 export interface MonthlyHoursPoint {
   month: string
   hours: number
@@ -73,4 +75,5 @@ export interface StatisticsOverview {
   punctuality: PunctualityBreakdown
   punctualityExtremes: PunctualityExtremes
   landingRate: LandingRateStats
+  gsxCosts: GsxCostStats
 }

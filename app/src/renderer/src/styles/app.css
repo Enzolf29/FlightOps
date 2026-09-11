@@ -2500,6 +2500,73 @@ button.danger,
   font-size: 12px;
 }
 
+.gsx-launch {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 15px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-surface));
+}
+
+.gsx-launch-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-hover));
+}
+
+.gsx-launch-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.gsx-launch-copy strong { font-size: 15px; }
+.gsx-launch-copy span { color: var(--text-secondary); font-size: 12px; }
+
+.gsx-launch-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gsx-receipt-frame-wrap {
+  position: relative;
+  min-height: 68vh;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: #303030;
+}
+
+.gsx-receipt-frame {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 68vh;
+  border: 0;
+  background: #f3f3f3;
+}
+
+.gsx-receipt-frame-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 13px;
+}
+
 .flight-recorder-panel {
   display: flex;
   flex-direction: column;

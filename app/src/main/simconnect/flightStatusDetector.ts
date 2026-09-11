@@ -50,6 +50,14 @@ let sampleCount = 0
 let recoveredSession = false
 let recorderError: string | null = null
 let awaitingEngineShutdown = false
+const PENDING_ARRIVAL_SAFETY_TIMEOUT_MS = 5 * 60 * 1000
+/**
+ * Moteurs coupés, avion au parking : le vol reste armé le temps que l'annonce de débarquement (si
+ * elle doit être jouée) se termine réellement, plutôt que d'être tronquée par le désarmement
+ * immédiat du vol — voir beginPendingArrivalCompletion/confirmArrivalComplete.
+ */
+let pendingArrivalConfirmation: { actualArrivalIso: string } | null = null
+let pendingArrivalTimeoutHandle: ReturnType<typeof setTimeout> | null = null
 const recorderListeners = new Set<(status: FlightRecorderStatus) => void>()
 
 let previousTelemetry: SimTelemetry | null = null
@@ -276,6 +284,7 @@ export function armFlight(flightId: number): void {
   landingPrecisionArmed = isResuming
   touchdownStats = null
   awaitingEngineShutdown = false
+  cancelPendingArrivalCompletion()
   sessionStartedAt = new Date().toISOString()
   lastPersistedAtMs = 0
   sampleCount = 0
@@ -290,10 +299,45 @@ export function disarmFlight(): void {
   tickState = null
   actualDepartureIso = null
   awaitingEngineShutdown = false
+  cancelPendingArrivalCompletion()
   sessionStartedAt = null
   recoveredSession = false
   if (flightId !== null) deleteFlightSession(flightId)
   notifyRecorderStatus()
+}
+
+/**
+ * Moteurs coupés, avion au parking : n'achève pas le vol tout de suite — laisse le temps à
+ * l'annonce de débarquement de se jouer en entier (voir confirmArrivalComplete, déclenché côté
+ * renderer). Filet de sécurité : clôture quand même le vol après PENDING_ARRIVAL_SAFETY_TIMEOUT_MS
+ * si cette confirmation n'arrive jamais (annonces désactivées côté renderer fermé, etc.).
+ */
+function beginPendingArrivalCompletion(actualArrivalIso: string): void {
+  pendingArrivalConfirmation = { actualArrivalIso }
+  pendingArrivalTimeoutHandle = setTimeout(() => {
+    pendingArrivalTimeoutHandle = null
+    confirmArrivalComplete()
+  }, PENDING_ARRIVAL_SAFETY_TIMEOUT_MS)
+}
+
+function cancelPendingArrivalCompletion(): void {
+  if (pendingArrivalTimeoutHandle) clearTimeout(pendingArrivalTimeoutHandle)
+  pendingArrivalTimeoutHandle = null
+  pendingArrivalConfirmation = null
+}
+
+/**
+ * Termine effectivement un vol en attente de clôture (voir beginPendingArrivalCompletion) : appelé
+ * par le renderer une fois l'annonce de débarquement terminée, ou immédiatement si aucune n'est
+ * prévue pour ce vol. Sans effet si aucune clôture n'est en attente (vol déjà désarmé manuellement,
+ * appel tardif, etc.). L'heure d'arrivée officielle (coupure moteurs) n'est pas affectée : elle
+ * reste celle capturée au moment de beginPendingArrivalCompletion, pas l'heure de cet appel.
+ */
+export function confirmArrivalComplete(): void {
+  if (!pendingArrivalConfirmation) return
+  const { actualArrivalIso } = pendingArrivalConfirmation
+  cancelPendingArrivalCompletion()
+  completeArmedFlight(actualArrivalIso)
 }
 
 export function getArmedFlightId(): number | null {
@@ -449,6 +493,19 @@ export function handleTelemetryTick(telemetry: SimTelemetry): void {
     }
   }
 
+  // Vol en attente de clôture (moteurs coupés, annonce de débarquement pas encore terminée, voir
+  // beginPendingArrivalCompletion) : si un moteur redémarre entre-temps, la coupure était
+  // provisoire (roulage vers un autre point de parking, etc.) — on annule l'attente et on reprend
+  // le suivi normal. Sinon, rien d'autre à faire tant que confirmArrivalComplete n'arrive pas.
+  if (pendingArrivalConfirmation !== null) {
+    if (telemetry.enginesRunning) {
+      cancelPendingArrivalCompletion()
+    } else {
+      persistFlightSession(telemetry)
+      return
+    }
+  }
+
   const telemetryBeforeTick = previousTelemetry
   const { events: newEvents, nextFlags } = evaluateFlightEvents(telemetryBeforeTick, telemetry, eventFlags, plannedCruiseAltitudeFeet)
   eventFlags = nextFlags
@@ -485,7 +542,7 @@ export function handleTelemetryTick(telemetry: SimTelemetry): void {
   if (awaitingEngineShutdown && !telemetry.enginesRunning) {
     const taxiInEvent = createTaxiInEvent(lastLandingSimTimeIso, telemetry.simZuluIso)
     if (taxiInEvent) pushEvent(taxiInEvent)
-    completeArmedFlight(telemetry.simZuluIso)
+    beginPendingArrivalCompletion(telemetry.simZuluIso)
     return
   }
 
@@ -512,7 +569,7 @@ export function handleTelemetryTick(telemetry: SimTelemetry): void {
     if (!telemetry.enginesRunning) {
       const taxiInEvent = createTaxiInEvent(lastLandingSimTimeIso, telemetry.simZuluIso)
       if (taxiInEvent) pushEvent(taxiInEvent)
-      completeArmedFlight(telemetry.simZuluIso)
+      beginPendingArrivalCompletion(telemetry.simZuluIso)
       return
     }
   }

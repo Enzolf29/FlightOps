@@ -19,9 +19,16 @@ import { formatInTimeZone } from 'date-fns-tz'
 import { useStatistics } from '@renderer/hooks/useStatistics'
 import { StatGrid } from '@renderer/components/StatGrid'
 import { ArrowUpDownIcon } from '@renderer/components/icons'
-import { formatHours, parseUtc } from '@renderer/lib/format'
+import { formatEur, formatHours, parseUtc } from '@renderer/lib/format'
 import { HARD_LANDING_VS_FPM } from '@shared/flightStatus/evaluateFlightEvents'
 import { formatDelayDuration } from '@shared/flightStatus/formatDelayDuration'
+
+const GSX_CATEGORY_COLORS: Record<string, string> = {
+  Fuel: 'var(--accent)',
+  Catering: '#2fb170',
+  Handling: '#e0a72c',
+  PassengerBus: 'var(--status-delayed-mid)'
+}
 
 const PUNCTUALITY_COLORS = {
   onTime: 'var(--status-on-time)',
@@ -79,6 +86,12 @@ export function StatisticsPage() {
   const landingCategoryData = data.landingRate.categoryBreakdown
     .map((entry) => ({ key: entry.category, label: entry.label, value: entry.count }))
     .filter((entry) => entry.value > 0)
+
+  const gsxCategoryData = data.gsxCosts.byCategory.map((entry) => ({
+    key: entry.category,
+    label: entry.label,
+    value: Math.round(entry.totalEur * 100) / 100
+  }))
 
   return (
     <div className="fleet-page">
@@ -281,6 +294,46 @@ export function StatisticsPage() {
               </>
             ) : (
               <p className="empty-hint">Aucune donnée d’atterrissage enregistrée pour l’instant.</p>
+            )}
+          </section>
+
+          <section className="home-section">
+            <h2>Frais d’escale (GSX)</h2>
+            {data.gsxCosts.flightsWithData > 0 ? (
+              <div className="stats-with-chart">
+                <StatGrid
+                  compact
+                  items={[
+                    { key: 'total', label: 'Total facturé', value: formatEur(data.gsxCosts.totalEur) },
+                    { key: 'flights', label: 'Vols avec données GSX', value: data.gsxCosts.flightsWithData },
+                    {
+                      key: 'perFlight',
+                      label: 'Coût moyen / vol',
+                      value: formatEur(data.gsxCosts.totalEur / data.gsxCosts.flightsWithData)
+                    }
+                  ]}
+                />
+                {gsxCategoryData.length > 0 ? (
+                  <div className="pirep-chart-wrapper">
+                    <ResponsiveContainer width="100%" height={240}>
+                      <PieChart>
+                        <Pie data={gsxCategoryData} dataKey="value" nameKey="label" innerRadius={60} outerRadius={100} paddingAngle={2}>
+                          {gsxCategoryData.map((entry) => (
+                            <Cell key={entry.key} fill={GSX_CATEGORY_COLORS[entry.key] ?? 'var(--accent)'} />
+                          ))}
+                        </Pie>
+                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                        <Tooltip
+                          formatter={(value) => formatEur(Number(value))}
+                          contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="empty-hint">Aucune facture GSX rattachée à vos vols pour l’instant (nécessite GSX Pro 4+).</p>
             )}
           </section>
         </>

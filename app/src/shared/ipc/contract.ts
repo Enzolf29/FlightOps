@@ -61,6 +61,7 @@ export const IPC = {
     getActualDepartureIso: 'simconnect:getActualDepartureIso',
     getLiveFlightPath: 'simconnect:getLiveFlightPath',
     completeManually: 'simconnect:completeManually',
+    confirmArrivalComplete: 'simconnect:confirmArrivalComplete',
     getMetar: 'simconnect:getMetar',
     flightEvent: 'simconnect:flightEvent',
     getFlightEvents: 'simconnect:getFlightEvents',
@@ -94,5 +95,10 @@ export const IPC = {
   app: {
     deleteAllData: 'app:deleteAllData',
     openExternal: 'app:openExternal'
+  },
+  gsx: {
+    getReceiptsForFlight: 'gsx:getReceiptsForFlight',
+    readReceiptHtml: 'gsx:readReceiptHtml',
+    getCostStatsForAircraft: 'gsx:getCostStatsForAircraft'
   }
 } as const

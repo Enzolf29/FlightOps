@@ -14,6 +14,7 @@ import type { FlightEvent } from '../flightStatus/evaluateFlightEvents'
 import type { CabinAnnouncementFile, CabinAnnouncementType } from '../types/cabinAnnouncements'
 import type { TabletCabinCommand, TabletCabinStatus, TabletServerInfo } from '../types/tablet'
 import type { AppUpdateStatus } from '../types/appUpdate'
+import type { GsxCostStats, GsxReceipt } from '../types/gsxReceipt'
 
 export interface FlightopsApi {
   home: {
@@ -78,6 +79,7 @@ export interface FlightopsApi {
     getActualDepartureIso: () => Promise<string | null>
     getLiveFlightPath: () => Promise<PirepFlightPathPoint[]>
     completeManually: () => Promise<void>
+    confirmArrivalComplete: () => Promise<void>
     getMetar: (icaoCode: string) => Promise<string>
     getFlightEvents: () => Promise<FlightEvent[]>
     onFlightEvent: (listener: (event: FlightEvent) => void) => () => void
@@ -111,5 +113,10 @@ export interface FlightopsApi {
   app: {
     openExternal: (url: string) => Promise<void>
     deleteAllData: () => Promise<boolean>
+  }
+  gsx: {
+    getReceiptsForFlight: (flightId: number, referenceEndIso?: string | null) => Promise<GsxReceipt[]>
+    readReceiptHtml: (htmlPath: string) => Promise<string | null>
+    getCostStatsForAircraft: (aircraftId: number) => Promise<GsxCostStats>
   }
 }

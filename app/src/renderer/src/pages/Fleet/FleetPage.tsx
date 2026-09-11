@@ -2,14 +2,15 @@ import { useMemo, useState } from 'react'
 import { useCompanies, useUpdateCompany } from '@renderer/hooks/useCompanies'
 import { useAircraft, useCreateAircraft, useUpdateAircraft, useDeleteAircraft } from '@renderer/hooks/useAircraft'
 import { usePirepsByAircraft } from '@renderer/hooks/usePireps'
+import { useGsxCostStatsForAircraft } from '@renderer/hooks/useGsxCostStatsForAircraft'
 import { CompanyLogo } from '@renderer/components/CompanyLogo'
 import { Modal } from '@renderer/components/Modal'
 import { AircraftForm } from '@renderer/components/AircraftForm'
 import { PirepListRow } from '@renderer/components/PirepListRow'
 import { PirepDetail } from '@renderer/components/PirepDetail'
 import { StatGrid } from '@renderer/components/StatGrid'
-import { ActivityIcon, ClockIcon, DropletIcon, GaugeIcon, MapPinIcon, RouteIcon } from '@renderer/components/icons'
-import { formatHours, formatDateTime } from '@renderer/lib/format'
+import { ActivityIcon, ClockIcon, DollarSignIcon, DropletIcon, GaugeIcon, MapPinIcon, RouteIcon } from '@renderer/components/icons'
+import { formatEur, formatHours, formatDateTime } from '@renderer/lib/format'
 import { getAirportLabel } from '@shared/airports/airportNames'
 import type { AircraftInput, AircraftWithStats } from '@shared/types/aircraft'
 import type { CallsignPattern, Company } from '@shared/types/company'
@@ -298,6 +299,7 @@ interface AircraftFlightsModalProps {
 
 function AircraftFlightsModal({ aircraft, onClose }: AircraftFlightsModalProps) {
   const { data: pireps, isLoading } = usePirepsByAircraft(aircraft.id)
+  const { data: gsxCosts } = useGsxCostStatsForAircraft(aircraft.id, true)
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
   const selected = pireps?.find((pirep) => pirep.id === selectedId) ?? null
@@ -367,6 +369,13 @@ function AircraftFlightsModal({ aircraft, onClose }: AircraftFlightsModalProps) 
             value: aircraft.mostVisitedIcao ? getAirportLabel(aircraft.mostVisitedIcao) : '—',
             detail: aircraft.mostVisitedIcao ? `${aircraft.mostVisitedCount} arrivée${aircraft.mostVisitedCount > 1 ? 's' : ''}` : undefined,
             icon: <MapPinIcon />
+          },
+          {
+            key: 'gsxCosts',
+            label: 'Frais GSX totaux',
+            value: gsxCosts && gsxCosts.flightsWithData > 0 ? formatEur(gsxCosts.totalEur) : '—',
+            detail: gsxCosts && gsxCosts.flightsWithData > 0 ? `Sur ${gsxCosts.flightsWithData} vol${gsxCosts.flightsWithData > 1 ? 's' : ''}` : undefined,
+            icon: <DollarSignIcon />
           }
           ]}
         />

@@ -17,6 +17,7 @@ import type { FlightEvent } from '@shared/flightStatus/evaluateFlightEvents'
 import type { CabinAnnouncementFile, CabinAnnouncementType } from '@shared/types/cabinAnnouncements'
 import type { TabletCabinCommand, TabletCabinStatus, TabletServerInfo } from '@shared/types/tablet'
 import type { AppUpdateStatus } from '@shared/types/appUpdate'
+import type { GsxCostStats, GsxReceipt } from '@shared/types/gsxReceipt'
 import type { FlightopsApi } from '@shared/ipc/api'
 
 const flightopsApi: FlightopsApi = {
@@ -102,6 +103,7 @@ const flightopsApi: FlightopsApi = {
     getActualDepartureIso: (): Promise<string | null> => ipcRenderer.invoke(IPC.simconnect.getActualDepartureIso),
     getLiveFlightPath: (): Promise<PirepFlightPathPoint[]> => ipcRenderer.invoke(IPC.simconnect.getLiveFlightPath),
     completeManually: (): Promise<void> => ipcRenderer.invoke(IPC.simconnect.completeManually),
+    confirmArrivalComplete: (): Promise<void> => ipcRenderer.invoke(IPC.simconnect.confirmArrivalComplete),
     getMetar: (icaoCode: string): Promise<string> => ipcRenderer.invoke(IPC.simconnect.getMetar, icaoCode),
     getFlightEvents: (): Promise<FlightEvent[]> => ipcRenderer.invoke(IPC.simconnect.getFlightEvents),
     onFlightEvent: (listener: (event: FlightEvent) => void): (() => void) => {
@@ -157,6 +159,13 @@ const flightopsApi: FlightopsApi = {
   app: {
     openExternal: (url: string): Promise<void> => ipcRenderer.invoke(IPC.app.openExternal, url),
     deleteAllData: (): Promise<boolean> => ipcRenderer.invoke(IPC.app.deleteAllData)
+  },
+  gsx: {
+    getReceiptsForFlight: (flightId: number, referenceEndIso?: string | null): Promise<GsxReceipt[]> =>
+      ipcRenderer.invoke(IPC.gsx.getReceiptsForFlight, flightId, referenceEndIso),
+    readReceiptHtml: (htmlPath: string): Promise<string | null> => ipcRenderer.invoke(IPC.gsx.readReceiptHtml, htmlPath),
+    getCostStatsForAircraft: (aircraftId: number): Promise<GsxCostStats> =>
+      ipcRenderer.invoke(IPC.gsx.getCostStatsForAircraft, aircraftId)
   }
 }
 

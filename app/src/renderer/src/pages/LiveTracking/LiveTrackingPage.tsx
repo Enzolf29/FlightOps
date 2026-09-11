@@ -11,6 +11,7 @@ import {
 import { useFlights } from '@renderer/hooks/useFlights'
 import { useOfpDetail } from '@renderer/hooks/useOfpDetail'
 import { useFlightEvents } from '@renderer/hooks/useFlightEvents'
+import { useGsxReceipts } from '@renderer/hooks/useGsxReceipts'
 import { Badge } from '@renderer/components/Badge'
 import { LiveFlightHero } from '@renderer/components/LiveFlightHero'
 import { StatGrid } from '@renderer/components/StatGrid'
@@ -18,6 +19,7 @@ import { LiveMap } from '@renderer/components/LiveMap'
 import { MetarPanel } from '@renderer/components/MetarPanel'
 import { OfpSummaryPanel } from '@renderer/components/OfpSummaryPanel'
 import { FlightEventLog } from '@renderer/components/FlightEventLog'
+import { GsxReceiptsPanel } from '@renderer/components/GsxReceiptsPanel'
 import { FlightRecorderPanel } from '@renderer/components/FlightRecorderPanel'
 import { CabinAnnouncementsRemote } from '@renderer/components/CabinAnnouncementsRemote'
 import { useCabinAnnouncementStore } from '@renderer/stores/cabinAnnouncementStore'
@@ -137,6 +139,7 @@ function ArmedFlightView({ flight, telemetry }: { flight: FlightWithRelations; t
   const events = useFlightEvents(flight.id)
   const { data: actualDepartureIso } = useActualDepartureIso(true)
   const { data: liveFlightPath } = useLiveFlightPath(true)
+  const { data: gsxReceipts, isLoading: gsxReceiptsLoading } = useGsxReceipts(flight.id, null, true)
 
   const nowIso = telemetry?.simZuluIso ?? new Date().toISOString()
   const punctuality = computeLivePunctuality(flight.scheduledDeparture, actualDepartureIso ?? null, nowIso)
@@ -199,6 +202,8 @@ function ArmedFlightView({ flight, telemetry }: { flight: FlightWithRelations; t
         <h2>Résumé SimBrief</h2>
         {ofp ? <OfpSummaryPanel ofp={ofp} flight={flight} /> : <p className="empty-hint">Aucun plan de vol SimBrief associé à ce vol.</p>}
       </section>
+
+      <GsxReceiptsPanel receipts={gsxReceipts ?? []} isLoading={gsxReceiptsLoading} />
 
       <section className="home-section">
         <h2>Journal d’évènements</h2>

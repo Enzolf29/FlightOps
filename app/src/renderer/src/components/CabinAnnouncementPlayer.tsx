@@ -164,6 +164,9 @@ export function CabinAnnouncementPlayer() {
     const queued = queueRef.current.shift()!
     const file = filesRef.current.get(queued.type)
     if (!file) {
+      // Le fichier a disparu entre l'ajout à la file et sa lecture (ex. supprimé des paramètres) :
+      // le débarquement ne sera jamais annoncé, la clôture du vol ne doit pas rester en attente.
+      if (queued.type === 'disembark_started') void window.flightops.simconnect.confirmArrivalComplete()
       publishPlayback()
       queueMicrotask(playNextInQueue)
       return
@@ -188,6 +191,10 @@ export function CabinAnnouncementPlayer() {
       audio.onended = null
       audio.onerror = null
       publishPlayback()
+      // L'annonce de débarquement (jouée automatiquement à la coupure moteurs, voir
+      // evaluateCabinAnnouncementTriggers) fait attendre la clôture du vol côté main process — la
+      // confirmer une fois terminée (ou en échec) plutôt que de la laisser en attente indéfiniment.
+      if (queued.type === 'disembark_started') void window.flightops.simconnect.confirmArrivalComplete()
       playNextInQueue()
     }
     audio.onended = finish
@@ -430,6 +437,13 @@ export function CabinAnnouncementPlayer() {
     const result = evaluateCabinAnnouncementTriggers(previousTelemetryRef.current, telemetry, triggerStateRef.current, Date.now())
     triggerStateRef.current = result.nextState
     previousTelemetryRef.current = telemetry
+    const disembarks = result.actions.some((action) => action.kind === 'enqueue' && action.types.includes('disembark_started'))
+    // La clôture du vol attend cette annonce côté main process (voir confirmArrivalComplete) : si
+    // elle ne sera de toute façon jamais jouée (automatisme coupé ou fichier absent), confirmer
+    // tout de suite plutôt que de laisser le vol en attente jusqu'au filet de sécurité.
+    if (disembarks && !(automaticAnnouncementsEnabled && filesRef.current.has('disembark_started'))) {
+      void window.flightops.simconnect.confirmArrivalComplete()
+    }
     if (automaticAnnouncementsEnabled) executeActions(result.actions)
   }, [telemetry, activeFlight, detectedCompany, filesReady, automationSessionReady, automaticAnnouncementsEnabled, executeActions])
 

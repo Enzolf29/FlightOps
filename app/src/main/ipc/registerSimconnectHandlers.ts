@@ -11,6 +11,7 @@ import { requestMetar } from '../simconnect/metarClient'
 import {
   armFlight,
   completeManually,
+  confirmArrivalComplete,
   disarmFlight,
   getActualDepartureIso,
   getArmedFlightId,
@@ -46,6 +47,7 @@ export function registerSimconnectHandlers(): void {
   ipcMain.handle(IPC.simconnect.getArmedFlightId, () => getArmedFlightId())
   ipcMain.handle(IPC.simconnect.getActualDepartureIso, () => getActualDepartureIso())
   ipcMain.handle(IPC.simconnect.completeManually, () => completeManually())
+  ipcMain.handle(IPC.simconnect.confirmArrivalComplete, () => confirmArrivalComplete())
   ipcMain.handle(IPC.simconnect.getMetar, (_event, icaoCode: string) => requestMetar(icaoCode))
   ipcMain.handle(IPC.simconnect.getFlightEvents, () => getFlightEvents())
   ipcMain.handle(IPC.simconnect.getLiveFlightPath, () => getLiveFlightPath())

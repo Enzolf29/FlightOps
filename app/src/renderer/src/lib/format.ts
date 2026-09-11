@@ -23,3 +23,7 @@ export function formatFlightDuration(scheduledDeparture: string, scheduledArriva
   const minutes = minutesTotal % 60
   return `${hours}h${String(minutes).padStart(2, '0')}`
 }
+
+export function formatEur(amount: number): string {
+  return `${amount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+}

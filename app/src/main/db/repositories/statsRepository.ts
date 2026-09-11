@@ -17,7 +17,9 @@ import {
   LANDING_RATE_CATEGORY_LABEL,
   type LandingRateCategory
 } from '@shared/flightStatus/categorizeLandingRate'
-import { getCumulativeStats } from './pirepRepository'
+import type { GsxCostStats } from '@shared/types/gsxReceipt'
+import { getGsxCostStatsForFlights } from '../../gsx/gsxReceiptsRepository'
+import { getAllPireps, getCumulativeStats, getPirepsByAircraft } from './pirepRepository'
 
 const TOP_ROUTES_LIMIT = 10
 const LANDING_RATE_CATEGORY_ORDER: LandingRateCategory[] = ['very_smooth', 'smooth', 'normal', 'firm', 'hard', 'very_hard']
@@ -201,6 +203,24 @@ function getLandingRateStats(): LandingRateStats {
   }
 }
 
+function gsxCostStatsForPireps(pireps: ReturnType<typeof getAllPireps>): GsxCostStats {
+  return getGsxCostStatsForFlights(
+    pireps.map((pirep) => ({
+      departureIcao: pirep.flight.departureIcao,
+      arrivalIcao: pirep.flight.arrivalIcao,
+      scheduledDeparture: pirep.flight.scheduledDeparture,
+      aircraft: pirep.flight.aircraft,
+      referenceEndIso: pirep.engineStopTime
+    }))
+  )
+}
+
+/** Frais GSX rattachés aux vols terminés d'un avion précis (fiche avion) — même logique de
+ * rapprochement que les statistiques globales, mais restreinte à cet avion. */
+export function getGsxCostStatsForAircraft(aircraftId: number): GsxCostStats {
+  return gsxCostStatsForPireps(getPirepsByAircraft(aircraftId))
+}
+
 export function getStatisticsOverview(): StatisticsOverview {
   const { cumulativeHours, totalFlights } = getCumulativeStats()
 
@@ -213,6 +233,7 @@ export function getStatisticsOverview(): StatisticsOverview {
     topRoutes: getTopRoutes(TOP_ROUTES_LIMIT),
     punctuality: getPunctualityBreakdown(),
     punctualityExtremes: getPunctualityExtremes(),
-    landingRate: getLandingRateStats()
+    landingRate: getLandingRateStats(),
+    gsxCosts: gsxCostStatsForPireps(getAllPireps())
   }
 }
