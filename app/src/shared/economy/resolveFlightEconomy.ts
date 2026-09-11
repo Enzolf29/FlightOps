@@ -1,11 +1,34 @@
 import { greatCircleDistanceNm } from '../flightStatus/computeFlightDistanceProgress'
-import { REFERENCE_CARGO_PRICE_EUR_PER_KG, type PricingTierFareModel, type ResolvedFlightEconomy } from '../types/economy'
+import {
+  BUSINESS_CLASS_PRICE_MULTIPLIER,
+  FIRST_CLASS_PRICE_MULTIPLIER,
+  LONG_HAUL_DISTANCE_NM_THRESHOLD,
+  REFERENCE_CARGO_PRICE_EUR_PER_KG,
+  type CabinSplit,
+  type PricingTierFareModel,
+  type ResolvedFlightEconomy
+} from '../types/economy'
 
 /** Prix de référence (le "juste prix") pour une distance donnée : une part fixe par vol (frais
  * d'aéroport, handling, équipage minimum) plus une part au NM — un modèle purement linéaire
  * sous-évalue fortement les courts et moyens courriers, voir PRICING_TIER_FARE_MODEL. */
 export function computeReferenceTicketPriceEur(fareModel: PricingTierFareModel, distanceNm: number): number {
   return fareModel.baseFareEur + fareModel.perNmEur * distanceNm
+}
+
+/**
+ * Multiplicateur de revenu passager appliqué au prix billet économique : 1 en dessous du seuil
+ * long-courrier (aucun ajustement), sinon la moyenne pondérée des multiplicateurs par classe selon
+ * la répartition de la compagnie — capture le supplément business/première sans changer le prix
+ * économique affiché ni le calcul de demande (basé uniquement sur le tarif économique).
+ */
+export function computeCabinRevenueMultiplier(cabinSplit: CabinSplit, distanceNm: number): number {
+  if (distanceNm < LONG_HAUL_DISTANCE_NM_THRESHOLD) return 1
+  return (
+    cabinSplit.economyShare * 1 +
+    cabinSplit.businessShare * BUSINESS_CLASS_PRICE_MULTIPLIER +
+    cabinSplit.firstShare * FIRST_CLASS_PRICE_MULTIPLIER
+  )
 }
 
 /** Au-dessus du prix de référence, la demande chute selon une loi de puissance : doubler le prix
@@ -32,6 +55,8 @@ export interface ResolveFlightEconomyInput {
   referenceFareModel: PricingTierFareModel
   /** Surtaxe "petit aéroport" côté départ (voir computeAirportSurcharge), ex. 0.25 pour +25 %. */
   airportSurchargeFraction: number
+  /** Répartition passagers par classe du positionnement de la compagnie (PRICING_TIER_CABIN_SPLIT). */
+  cabinSplit: CabinSplit
   routePrice: {
     ticketPriceMinEur: number
     ticketPriceMaxEur: number
@@ -80,6 +105,7 @@ export function resolveFlightEconomy(
     cargoPriceEurPerKg: Math.round(cargoPriceEurPerKg * 100) / 100,
     referenceTicketPriceEur: Math.round(referenceTicketPriceEur * 100) / 100,
     referenceCargoPriceEurPerKg,
+    cabinRevenueMultiplier: computeCabinRevenueMultiplier(input.cabinSplit, distanceNm),
     expectedPassengers: Math.max(0, Math.round(paxLoadFactor * input.seatCapacity)),
     expectedCargoKg: Math.max(0, Math.round(cargoLoadFactor * input.cargoCapacityKg))
   }

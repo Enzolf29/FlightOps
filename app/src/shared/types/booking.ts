@@ -5,6 +5,7 @@ export interface CreateFlightFromOfpEconomyInput {
   cargoPriceEurPerKg: number
   referenceTicketPriceEur: number
   referenceCargoPriceEurPerKg: number
+  cabinRevenueMultiplier: number
 }
 
 export interface CreateFlightFromOfpInput {

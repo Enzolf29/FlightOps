@@ -56,6 +56,7 @@ export function registerBookingHandlers(): void {
         cargoPriceEurPerKg: input.economy.cargoPriceEurPerKg,
         referenceTicketPriceEur: input.economy.referenceTicketPriceEur,
         referenceCargoPriceEurPerKg: input.economy.referenceCargoPriceEurPerKg,
+        cabinRevenueMultiplier: input.economy.cabinRevenueMultiplier,
         passengersSold,
         cargoKgSold
       })

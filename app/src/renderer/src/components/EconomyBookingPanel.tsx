@@ -64,11 +64,7 @@ export function EconomyBookingPanel({
         <div className="economy-booking-preview">
           <span>
             Billet {formatEur(resolution.economyInput.ticketPriceEur)}
-            <small>
-              {' '}
-              (référence {formatEur(resolution.economyInput.referenceTicketPriceEur)}
-              {airportSurcharge ? ` · +${Math.round(airportSurcharge * 100)}% petit aéroport` : ''})
-            </small>
+            <small> (référence {formatEur(resolution.economyInput.referenceTicketPriceEur)})</small>
           </span>
           <span>≈ {resolution.expectedPassengers} passagers attendus</span>
           <span>

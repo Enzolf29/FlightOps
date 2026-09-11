@@ -209,15 +209,44 @@ export function getKnownDepartureAirports(companyId: number): Array<{ icao: stri
     .all(companyId) as Array<{ icao: string; lastFetchedAt: string | null }>
 }
 
-/** Nombre de destinations réelles connues (Vols réels/AeroDataBox) pour cette compagnie au départ
- * de cet aéroport — sert de proxy "taille d'aéroport" pour le mode économie (voir
- * computeAirportSurcharge). Null si cet aéroport n'a jamais été recherché pour cette compagnie,
- * distinct de 0 (recherché mais aucune destination trouvée). */
-export function getKnownRouteCountFromAirport(companyId: number, departureIcao: string): number | null {
+/** Au-delà de ce nombre d'observations, une même route ne pèse pas plus lourd dans le score
+ * d'activité — sans ça, une seule route revérifiée à chaque recherche gonflerait le score d'un
+ * aéroport par ailleurs très peu desservi, à tort perçu comme un vrai hub. */
+const OBSERVATION_SCORE_CAP_PER_ROUTE = 5
+
+/**
+ * Activité réelle connue (Vols réels/AeroDataBox) pour cette compagnie au départ de cet aéroport —
+ * sert de proxy "taille d'aéroport" pour le mode économie (voir computeAirportSurcharge). Somme,
+ * route par route, le nombre d'observations plafonné à OBSERVATION_SCORE_CAP_PER_ROUTE — un simple
+ * cumul "nombre de destinations + observations" surestimerait un aéroport dont beaucoup de
+ * destinations n'ont été vues qu'une seule fois (une grosse recherche AeroDataBox déclare d'un coup
+ * des dizaines de routes distinctes) : seules des routes confirmées à plusieurs reprises comptent
+ * vraiment pour beaucoup, ce qui distingue un vrai hub souvent revérifié d'un aéroport moyen
+ * simplement balayé une fois en largeur.
+ *
+ * Null si cet aéroport n'a jamais été recherché pour cette compagnie, distinct de 0 (recherché mais
+ * aucune destination trouvée).
+ */
+export function getKnownAirportActivityScore(companyId: number, departureIcao: string): number | null {
   const normalized = departureIcao.trim().toUpperCase()
   const searched = getKnownDepartureAirports(companyId).some((entry) => entry.icao === normalized)
   if (!searched) return null
-  return getCachedRoutes(companyId, normalized).length
+
+  const row = getDb()
+    .prepare(
+      `SELECT SUM(capped) AS score FROM (
+         SELECT MIN(obs_count, ?) AS capped FROM (
+           SELECT COUNT(o.id) AS obs_count
+           FROM real_routes r
+           LEFT JOIN real_route_observations o ON o.real_route_id = r.id
+           WHERE r.company_id = ? AND r.departure_icao = ?
+           GROUP BY r.id
+         )
+       )`
+    )
+    .get(OBSERVATION_SCORE_CAP_PER_ROUTE, companyId, normalized) as { score: number | null }
+
+  return row.score ?? 0
 }
 
 export function addFlightNumberObservation(routeId: number, flightNumber: string): void {

@@ -19,7 +19,7 @@ describe('computeAirportSurcharge', () => {
   })
 
   it('reaches the floor at the threshold and never drops below it beyond that', () => {
-    expect(computeAirportSurcharge(6)).toBeCloseTo(0.1, 5)
+    expect(computeAirportSurcharge(15)).toBeCloseTo(0.1, 5)
     expect(computeAirportSurcharge(50)).toBeCloseTo(0.1, 5)
   })
 })

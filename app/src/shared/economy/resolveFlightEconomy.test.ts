@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { computeLoadFactor, computeReferenceTicketPriceEur, resolveFlightEconomy } from './resolveFlightEconomy'
-import { PRICING_TIER_FARE_MODEL } from '../types/economy'
+import {
+  computeCabinRevenueMultiplier,
+  computeLoadFactor,
+  computeReferenceTicketPriceEur,
+  resolveFlightEconomy
+} from './resolveFlightEconomy'
+import { PRICING_TIER_CABIN_SPLIT, PRICING_TIER_FARE_MODEL } from '../types/economy'
 import { greatCircleDistanceNm } from '../flightStatus/computeFlightDistanceProgress'
 
 /** Retourne les valeurs fournies dans l'ordre à chaque appel, pour des tests déterministes. */
@@ -53,12 +58,29 @@ describe('computeReferenceTicketPriceEur', () => {
   })
 })
 
+describe('computeCabinRevenueMultiplier', () => {
+  it('stays at 1 below the long-haul threshold, regardless of cabin split', () => {
+    expect(computeCabinRevenueMultiplier(PRICING_TIER_CABIN_SPLIT.premium, 1999)).toBe(1)
+  })
+
+  it('blends the per-class multipliers above the long-haul threshold', () => {
+    const multiplier = computeCabinRevenueMultiplier(PRICING_TIER_CABIN_SPLIT.classic, 3000)
+    // 0.85×1 + 0.13×3 + 0.02×6 = 0.85 + 0.39 + 0.12 = 1.36
+    expect(multiplier).toBeCloseTo(1.36, 5)
+  })
+
+  it('never raises revenue for a low-cost long-haul flight (100% economy split)', () => {
+    expect(computeCabinRevenueMultiplier(PRICING_TIER_CABIN_SPLIT.low_cost, 5000)).toBe(1)
+  })
+})
+
 describe('resolveFlightEconomy', () => {
   const baseInput = {
     // Base à 0 dans ces tests : on isole l'effet de la part au NM (déjà couverte séparément
     // ci-dessus) pour ne pas casser les valeurs numériques attendues plus bas.
     referenceFareModel: { baseFareEur: 0, perNmEur: 0.1 },
     airportSurchargeFraction: 0,
+    cabinSplit: PRICING_TIER_CABIN_SPLIT.classic,
     routePrice: {
       ticketPriceMinEur: 80,
       ticketPriceMaxEur: 120,
@@ -105,6 +127,19 @@ describe('resolveFlightEconomy', () => {
       sequenceRandom([0, 0, 0.5, 0.5])
     )
     expect(expensive.expectedPassengers).toBeLessThan(cheap.expectedPassengers)
+  })
+
+  it('keeps a cabin revenue multiplier of 1 on a medium-haul route below the long-haul threshold', () => {
+    const result = resolveFlightEconomy(baseInput, sequenceRandom([0, 0, 0.5, 0.5]))
+    expect(result.cabinRevenueMultiplier).toBe(1)
+  })
+
+  it('raises the cabin revenue multiplier on a long-haul route', () => {
+    const result = resolveFlightEconomy(
+      { ...baseInput, originLat: 49.0097, originLon: 2.5479, destLat: 25.2532, destLon: 55.3657 }, // Paris -> Dubaï, long-courrier
+      sequenceRandom([0, 0, 0.5, 0.5])
+    )
+    expect(result.cabinRevenueMultiplier).toBeGreaterThan(1)
   })
 
   it('never exceeds seat or cargo capacity', () => {

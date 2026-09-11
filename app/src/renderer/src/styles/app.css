@@ -2786,6 +2786,12 @@ button.danger,
   border: 1px solid var(--border-subtle);
 }
 
+/* Cliquer une ligne/aéroport lui donne le focus clavier — Chromium dessine alors un rectangle de
+   focus par défaut autour du path SVG, visible comme un carré de sélection parasite. */
+.live-map .leaflet-interactive:focus {
+  outline: none;
+}
+
 .live-map-legend {
   display: flex;
   flex-wrap: wrap;

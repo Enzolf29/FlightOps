@@ -87,6 +87,7 @@ interface FlightEconomyRow {
   cargo_price_eur_per_kg: number
   reference_ticket_price_eur: number
   reference_cargo_price_eur_per_kg: number
+  cabin_revenue_multiplier: number
   passengers_sold: number | null
   cargo_kg_sold: number | null
   revenue_eur: number | null
@@ -99,6 +100,7 @@ function mapFlightEconomy(row: FlightEconomyRow): FlightEconomy {
     cargoPriceEurPerKg: row.cargo_price_eur_per_kg,
     referenceTicketPriceEur: row.reference_ticket_price_eur,
     referenceCargoPriceEurPerKg: row.reference_cargo_price_eur_per_kg,
+    cabinRevenueMultiplier: row.cabin_revenue_multiplier,
     passengersSold: row.passengers_sold,
     cargoKgSold: row.cargo_kg_sold,
     revenueEur: row.revenue_eur
@@ -111,15 +113,16 @@ function mapFlightEconomy(row: FlightEconomyRow): FlightEconomy {
 export function createFlightEconomy(input: FlightEconomyInput): void {
   const revenueEur =
     input.passengersSold !== null && input.cargoKgSold !== null
-      ? input.passengersSold * input.ticketPriceEur + input.cargoKgSold * input.cargoPriceEurPerKg
+      ? input.passengersSold * input.ticketPriceEur * input.cabinRevenueMultiplier +
+        input.cargoKgSold * input.cargoPriceEurPerKg
       : null
 
   getDb()
     .prepare(
       `INSERT INTO flight_economy
         (flight_id, ticket_price_eur, cargo_price_eur_per_kg, reference_ticket_price_eur,
-         reference_cargo_price_eur_per_kg, passengers_sold, cargo_kg_sold, revenue_eur)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+         reference_cargo_price_eur_per_kg, cabin_revenue_multiplier, passengers_sold, cargo_kg_sold, revenue_eur)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       input.flightId,
@@ -127,6 +130,7 @@ export function createFlightEconomy(input: FlightEconomyInput): void {
       input.cargoPriceEurPerKg,
       input.referenceTicketPriceEur,
       input.referenceCargoPriceEurPerKg,
+      input.cabinRevenueMultiplier,
       input.passengersSold,
       input.cargoKgSold,
       revenueEur

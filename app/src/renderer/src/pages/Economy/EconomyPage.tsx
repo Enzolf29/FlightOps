@@ -221,10 +221,7 @@ function RoutePriceRow({
       <span>
         {formatEur(routePrice.ticketPriceMinEur)} – {formatEur(routePrice.ticketPriceMaxEur)}
       </span>
-      <span className="text-muted">
-        {referencePrice !== null ? formatEur(referencePrice) : '—'}
-        {airportSurcharge ? <small> (+{Math.round(airportSurcharge * 100)}% petit aéroport)</small> : null}
-      </span>
+      <span className="text-muted">{referencePrice !== null ? formatEur(referencePrice) : '—'}</span>
       <span>
         {formatEur(routePrice.cargoPriceMinEurPerKg)} – {formatEur(routePrice.cargoPriceMaxEurPerKg)}/kg
       </span>

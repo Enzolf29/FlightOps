@@ -32,6 +32,32 @@ export const PRICING_TIER_FARE_MODEL: Record<PricingTier, PricingTierFareModel> 
  * compagnie comme le prix du billet passager. */
 export const REFERENCE_CARGO_PRICE_EUR_PER_KG = 3
 
+/** Distance à partir de laquelle un vol est considéré long-courrier (active le calcul
+ * business/première, voir PRICING_TIER_CABIN_SPLIT). */
+export const LONG_HAUL_DISTANCE_NM_THRESHOLD = 2000
+
+/** Multiplicateurs de prix fixes par classe, appliqués au prix billet économique — pas de fourchette
+ * indépendante à régler par ligne. */
+export const BUSINESS_CLASS_PRICE_MULTIPLIER = 3
+export const FIRST_CLASS_PRICE_MULTIPLIER = 6
+
+export interface CabinSplit {
+  economyShare: number
+  businessShare: number
+  firstShare: number
+}
+
+/**
+ * Répartition passagers par classe sur un vol long-courrier, selon le positionnement de la
+ * compagnie — une compagnie low-cost n'opère quasiment jamais de vraie cabine business/première en
+ * long-courrier, d'où 100 % économique pour ce positionnement.
+ */
+export const PRICING_TIER_CABIN_SPLIT: Record<PricingTier, CabinSplit> = {
+  low_cost: { economyShare: 1, businessShare: 0, firstShare: 0 },
+  classic: { economyShare: 0.85, businessShare: 0.13, firstShare: 0.02 },
+  premium: { economyShare: 0.7, businessShare: 0.22, firstShare: 0.08 }
+}
+
 export function isPricingTier(value: string): value is PricingTier {
   return (PRICING_TIERS as readonly string[]).includes(value)
 }
@@ -63,6 +89,9 @@ export interface FlightEconomy {
   cargoPriceEurPerKg: number
   referenceTicketPriceEur: number
   referenceCargoPriceEurPerKg: number
+  /** >1 sur un vol long-courrier : capture le supplément business/première (voir
+   * PRICING_TIER_CABIN_SPLIT), sans fausser ticketPriceEur qui reste le tarif économique affiché. */
+  cabinRevenueMultiplier: number
   passengersSold: number | null
   cargoKgSold: number | null
   revenueEur: number | null
@@ -74,6 +103,7 @@ export interface FlightEconomyInput {
   cargoPriceEurPerKg: number
   referenceTicketPriceEur: number
   referenceCargoPriceEurPerKg: number
+  cabinRevenueMultiplier: number
   passengersSold: number | null
   cargoKgSold: number | null
 }
@@ -84,6 +114,7 @@ export interface ResolvedFlightEconomy {
   cargoPriceEurPerKg: number
   referenceTicketPriceEur: number
   referenceCargoPriceEurPerKg: number
+  cabinRevenueMultiplier: number
   expectedPassengers: number
   expectedCargoKg: number
 }
