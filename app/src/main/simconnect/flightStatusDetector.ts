@@ -429,9 +429,24 @@ export function handleTelemetryTick(telemetry: SimTelemetry): void {
   // Indépendant des évènements ci-dessous (pas "le premier engine_stop reçu", mais "plus aucun
   // moteur en marche") : sur un multimoteur, evaluateFlightEvents émet un engine_stop par moteur
   // coupé, et le temps de bloc doit être pris à la coupure du dernier, pas du premier.
-  if (engineStartIso !== null && engineStopIso === null && !telemetry.enginesRunning) {
-    engineStopIso = telemetry.simZuluIso
-    fuelAtEngineStopKg = telemetry.fuelTotalWeight
+  //
+  // Cette coupure n'est PAS définitive tant que le vol n'est pas clôturé : sur certains avions
+  // tiers, le N1 (secours utilisé quand GENERAL ENG COMBUSTION reste bloqué, voir telemetryLoop)
+  // peut rester sous le seuil "moteur en marche" pendant un roulage prolongé à très faible
+  // puissance, confirmé "coupé" par l'anti-rebond, avant de remonter quand le pilote redonne un
+  // peu de gaz. Si un moteur est ensuite revu en marche, cette coupure était un faux positif — on
+  // l'efface pour ne garder que la vraie coupure finale, sans quoi "Arrivée officielle"/temps de
+  // bloc restent figés sur cet instant bien antérieur à la coupure moteur réelle.
+  if (engineStartIso !== null) {
+    if (telemetry.enginesRunning) {
+      if (engineStopIso !== null) {
+        engineStopIso = null
+        fuelAtEngineStopKg = null
+      }
+    } else if (engineStopIso === null) {
+      engineStopIso = telemetry.simZuluIso
+      fuelAtEngineStopKg = telemetry.fuelTotalWeight
+    }
   }
 
   const telemetryBeforeTick = previousTelemetry

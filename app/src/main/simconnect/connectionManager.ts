@@ -13,6 +13,7 @@ const RECONNECT_DELAY_MS = 10_000
 const APP_NAME = 'FlightOps'
 const EVENT_SIM_STATE = 0xf101
 const EVENT_PAUSE_STATE = 0xf102
+const EVENT_PAUSE_STATE_EX1 = 0xf103
 
 // node-simconnect lit le registre Windows via les scripts VBS de regedit. Dans l'application
 // emballée, electron-builder extrait ces scripts hors de app.asar afin que Windows Script Host
@@ -34,7 +35,12 @@ let stopLandingPrecision: (() => void) | null = null
 let stopMetarClient: (() => void) | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let simulationActive = false
-let simulationPaused = false
+// Deux évènements distincts alimentent l'état de pause : "Pause" (historique, fiabilité inégale
+// selon les versions du sim) et "Pause_EX1" (plus récent, recommandé par Asobo/Microsoft). On les
+// combine plutôt que de choisir l'un ou l'autre, faute de certitude sur celui que MSFS 2024 émet
+// réellement dans toutes les situations (pause active, menu Échap...).
+let pausedLegacy = false
+let pausedEx1 = false
 
 const statusListeners = new Set<StatusListener>()
 const telemetryListeners = new Set<TelemetryListener>()
@@ -84,17 +90,25 @@ function connect(): void {
       // valeurs dans le shell de MSFS.
       connection.subscribeToSystemEvent(EVENT_SIM_STATE, 'Sim')
       // L'horloge Zulu du sim (SimTelemetry.simZuluIso) se fige pendant une pause, alors que
-      // SimConnect continue de délivrer des ticks en temps réel : sans suivre "Pause", un
-      // évènement de vol confirmé pendant une pause (arrivée, coupure moteur...) serait horodaté
-      // avec l'heure sim gelée d'avant-pause plutôt qu'avec le moment réel de la confirmation.
+      // SimConnect continue de délivrer des ticks en temps réel : sans suivre la pause, un
+      // évènement de vol confirmé pendant ce laps de temps (arrivée, coupure moteur...) serait
+      // horodaté avec l'heure sim gelée d'avant-pause plutôt qu'avec le moment réel de la
+      // confirmation. "Pause_EX1" (bitmask, non-zéro dès qu'une pause quelconque est active) est
+      // la version documentée comme fiable ; "Pause" (0/1) reste suivi en secours.
       connection.subscribeToSystemEvent(EVENT_PAUSE_STATE, 'Pause')
+      connection.subscribeToSystemEvent(EVENT_PAUSE_STATE_EX1, 'Pause_EX1')
       connection.on('event', (event) => {
         if (event.clientEventId === EVENT_SIM_STATE) simulationActive = event.data === 1
-        if (event.clientEventId === EVENT_PAUSE_STATE) simulationPaused = event.data === 1
+        if (event.clientEventId === EVENT_PAUSE_STATE) pausedLegacy = event.data === 1
+        if (event.clientEventId === EVENT_PAUSE_STATE_EX1) pausedEx1 = event.data !== 0
       })
 
       stopTelemetry = startTelemetryLoop(connection, (telemetry) => {
-        const telemetryWithSession = { ...telemetry, simulationActive, simulationPaused }
+        const telemetryWithSession = {
+          ...telemetry,
+          simulationActive,
+          simulationPaused: pausedLegacy || pausedEx1
+        }
         for (const listener of telemetryListeners) listener(telemetryWithSession)
       })
       stopLandingPrecision = startLandingPrecisionLoop(connection, (sample) => {
@@ -115,7 +129,8 @@ function connect(): void {
 
 function handleDisconnect(): void {
   simulationActive = false
-  simulationPaused = false
+  pausedLegacy = false
+  pausedEx1 = false
   if (stopTelemetry) {
     stopTelemetry()
     stopTelemetry = null
