@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useCompanies } from '@renderer/hooks/useCompanies'
 import {
+  useAirportSurcharge,
   useCompanyEconomySummary,
   useDeleteRoutePrice,
   useRouteGsxCostHint,
@@ -10,19 +11,25 @@ import {
 import { CompanyPicker } from '@renderer/components/CompanyPicker'
 import { StatGrid } from '@renderer/components/StatGrid'
 import { RoutePriceForm } from '@renderer/components/RoutePriceForm'
+import { EconomyRouteMap, economyRoutePairKey } from '@renderer/components/EconomyRouteMap'
 import { formatEur } from '@renderer/lib/format'
 import { getAirportLabel } from '@shared/airports/airportNames'
 import { getAirportCoordinates } from '@shared/airports/airportCoordinates'
 import { greatCircleDistanceNm } from '@shared/flightStatus/computeFlightDistanceProgress'
-import { PRICING_TIER_LABEL, PRICING_TIER_REFERENCE_FARE_PER_NM } from '@shared/types/economy'
+import { computeReferenceTicketPriceEur } from '@shared/economy/resolveFlightEconomy'
+import { PRICING_TIER_LABEL, PRICING_TIER_FARE_MODEL } from '@shared/types/economy'
 import type { RoutePrice } from '@shared/types/economy'
 
-function referenceTicketPriceEur(company: { pricingTier: keyof typeof PRICING_TIER_REFERENCE_FARE_PER_NM }, routePrice: RoutePrice): number | null {
+function referenceTicketPriceEur(
+  company: { pricingTier: keyof typeof PRICING_TIER_FARE_MODEL },
+  routePrice: RoutePrice,
+  airportSurchargeFraction: number
+): number | null {
   const origin = getAirportCoordinates(routePrice.departureIcao)
   const dest = getAirportCoordinates(routePrice.arrivalIcao)
   if (!origin || !dest) return null
   const distanceNm = greatCircleDistanceNm(origin.lat, origin.lon, dest.lat, dest.lon)
-  return PRICING_TIER_REFERENCE_FARE_PER_NM[company.pricingTier] * distanceNm
+  return computeReferenceTicketPriceEur(PRICING_TIER_FARE_MODEL[company.pricingTier], distanceNm) * (1 + airportSurchargeFraction)
 }
 
 export function EconomyPage() {
@@ -32,12 +39,25 @@ export function EconomyPage() {
   const [editing, setEditing] = useState<RoutePrice | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [selectedPairKey, setSelectedPairKey] = useState<string | null>(null)
 
   const selectedCompany = companies?.find((company) => company.id === companyId) ?? null
   const { data: routePrices } = useRoutePricesForCompany(companyId)
   const { data: summary } = useCompanyEconomySummary(companyId)
   const upsertMutation = useUpsertRoutePrice()
   const deleteMutation = useDeleteRoutePrice()
+
+  useEffect(() => {
+    setSelectedPairKey(null)
+  }, [companyId])
+
+  const displayedRoutePrices = useMemo(() => {
+    if (!routePrices) return []
+    if (!selectedPairKey) return routePrices
+    return routePrices.filter(
+      (routePrice) => economyRoutePairKey(routePrice.departureIcao, routePrice.arrivalIcao) === selectedPairKey
+    )
+  }, [routePrices, selectedPairKey])
 
   function openCreate() {
     setEditing(null)
@@ -72,7 +92,7 @@ export function EconomyPage() {
       </p>
 
       {companies ? (
-        <div className="form-field">
+        <div className="form-field economy-company-field">
           <span>Compagnie</span>
           <CompanyPicker companies={companies} value={companyId} onChange={setCompanyId} />
         </div>
@@ -80,20 +100,22 @@ export function EconomyPage() {
 
       {selectedCompany ? (
         <>
-          <StatGrid
-            compact
-            items={[
-              { key: 'tier', label: 'Positionnement', value: PRICING_TIER_LABEL[selectedCompany.pricingTier] },
-              { key: 'revenue', label: 'Revenu total', value: summary ? formatEur(summary.totalRevenueEur) : '—' },
-              { key: 'cost', label: 'Coût GSX total', value: summary ? formatEur(summary.totalCostEur) : '—' },
-              {
-                key: 'profit',
-                label: 'Bénéfice',
-                value: summary && summary.flightsWithData > 0 ? formatEur(summary.profitEur) : '—',
-                detail: summary && summary.flightsWithData > 0 ? `Sur ${summary.flightsWithData} vol${summary.flightsWithData > 1 ? 's' : ''}` : undefined
-              }
-            ]}
-          />
+          <div className="economy-summary-field">
+            <StatGrid
+              compact
+              items={[
+                { key: 'tier', label: 'Positionnement', value: PRICING_TIER_LABEL[selectedCompany.pricingTier] },
+                { key: 'revenue', label: 'Revenu total', value: summary ? formatEur(summary.totalRevenueEur) : '—' },
+                { key: 'cost', label: 'Coût GSX total', value: summary ? formatEur(summary.totalCostEur) : '—' },
+                {
+                  key: 'profit',
+                  label: 'Bénéfice',
+                  value: summary && summary.flightsWithData > 0 ? formatEur(summary.profitEur) : '—',
+                  detail: summary && summary.flightsWithData > 0 ? `Sur ${summary.flightsWithData} vol${summary.flightsWithData > 1 ? 's' : ''}` : undefined
+                }
+              ]}
+            />
+          </div>
 
           <div className="fleet-toolbar">
             <button type="button" className="primary" onClick={openCreate}>
@@ -101,10 +123,28 @@ export function EconomyPage() {
             </button>
           </div>
 
+          {routePrices && routePrices.length > 0 ? (
+            <div className="economy-map-field">
+              <EconomyRouteMap
+                routePrices={routePrices}
+                selectedPairKey={selectedPairKey}
+                onSelectPair={setSelectedPairKey}
+              />
+            </div>
+          ) : null}
+
           {!routePrices || routePrices.length === 0 ? (
             <p className="empty-hint">Aucune ligne tarifée pour cette compagnie — le mode économie reste désactivé sur tous ses vols.</p>
           ) : (
             <div className="fleet-table economy-route-table">
+              {selectedPairKey ? (
+                <p className="form-hint economy-filter-hint">
+                  Aller-retour {selectedPairKey.replace('-', ' ↔ ')} uniquement.{' '}
+                  <button type="button" className="settings-link" onClick={() => setSelectedPairKey(null)}>
+                    Voir toutes les lignes
+                  </button>
+                </p>
+              ) : null}
               <div className="fleet-table-header economy-route-row">
                 <span>Ligne</span>
                 <span>Prix billet</span>
@@ -113,7 +153,7 @@ export function EconomyPage() {
                 <span>Coût GSX moyen</span>
                 <span></span>
               </div>
-              {routePrices.map((routePrice) => (
+              {displayedRoutePrices.map((routePrice) => (
                 <RoutePriceRow
                   key={routePrice.id}
                   company={selectedCompany}
@@ -148,7 +188,7 @@ export function EconomyPage() {
 }
 
 interface RoutePriceRowProps {
-  company: { pricingTier: keyof typeof PRICING_TIER_REFERENCE_FARE_PER_NM; id: number }
+  company: { pricingTier: keyof typeof PRICING_TIER_FARE_MODEL; id: number }
   routePrice: RoutePrice
   onEdit: () => void
   onDelete: () => void
@@ -169,7 +209,9 @@ function RoutePriceRow({
   deleting
 }: RoutePriceRowProps) {
   const { data: gsxHint } = useRouteGsxCostHint(company.id, routePrice.departureIcao, routePrice.arrivalIcao, true)
-  const referencePrice = referenceTicketPriceEur(company, routePrice)
+  const { data: airportSurcharge } = useAirportSurcharge(company.id, routePrice.departureIcao, true)
+  const referencePrice =
+    airportSurcharge !== undefined ? referenceTicketPriceEur(company, routePrice, airportSurcharge) : null
 
   return (
     <div className="fleet-table-row economy-route-row">
@@ -179,7 +221,10 @@ function RoutePriceRow({
       <span>
         {formatEur(routePrice.ticketPriceMinEur)} – {formatEur(routePrice.ticketPriceMaxEur)}
       </span>
-      <span className="text-muted">{referencePrice !== null ? formatEur(referencePrice) : '—'}</span>
+      <span className="text-muted">
+        {referencePrice !== null ? formatEur(referencePrice) : '—'}
+        {airportSurcharge ? <small> (+{Math.round(airportSurcharge * 100)}% petit aéroport)</small> : null}
+      </span>
       <span>
         {formatEur(routePrice.cargoPriceMinEurPerKg)} – {formatEur(routePrice.cargoPriceMaxEurPerKg)}/kg
       </span>

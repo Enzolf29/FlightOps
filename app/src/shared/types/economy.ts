@@ -7,15 +7,25 @@ export const PRICING_TIER_LABEL: Record<PricingTier, string> = {
   premium: 'Premium'
 }
 
+export interface PricingTierFareModel {
+  /** Part fixe par vol (frais d'aéroport, handling, équipage minimum) — un vol court coûte presque
+   * aussi cher à opérer qu'un vol moyen-courrier, d'où ce plancher indépendant de la distance. */
+  baseFareEur: number
+  /** Part variable au NM, s'ajoutant à baseFareEur. */
+  perNmEur: number
+}
+
 /**
- * Tarif de référence €/NM par positionnement compagnie — moyennes réelles observées en Europe
- * (2026) entre compagnies ultra low-cost et réseaux premium. Fixe et non modifiable par le joueur :
- * c'est le "juste prix" qui détermine la demande, seul le tarif réellement pratiqué se règle.
+ * Modèle de tarif de référence par positionnement compagnie — calé sur des prix réels observés en
+ * 2026 (ex. Brest–CDG, ~278 NM, classique : 90 + 0,10 × 278 ≈ 118 €, dans la fourchette 80-250 €
+ * réellement pratiquée). Fixe et non modifiable par le joueur : c'est le "juste prix" qui détermine
+ * la demande, seul le tarif réellement pratiqué se règle. Un modèle purement linéaire (juste
+ * distance × tarif) sous-évalue fortement les courts et moyens courriers, d'où la part fixe.
  */
-export const PRICING_TIER_REFERENCE_FARE_PER_NM: Record<PricingTier, number> = {
-  low_cost: 0.08,
-  classic: 0.15,
-  premium: 0.25
+export const PRICING_TIER_FARE_MODEL: Record<PricingTier, PricingTierFareModel> = {
+  low_cost: { baseFareEur: 35, perNmEur: 0.05 },
+  classic: { baseFareEur: 90, perNmEur: 0.1 },
+  premium: { baseFareEur: 120, perNmEur: 0.16 }
 }
 
 /** Tarif fret de référence €/kg — le marché du fret aérien ne se différencie pas par positionnement

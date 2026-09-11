@@ -1364,6 +1364,23 @@ button.danger,
   grid-template-columns: 1.8fr 1.3fr 1fr 1.3fr 1.5fr 1.3fr;
 }
 
+.economy-company-field,
+.economy-summary-field {
+  margin-bottom: 20px;
+}
+
+.economy-map-field {
+  margin-bottom: 20px;
+}
+
+.economy-map-hint {
+  text-align: center;
+}
+
+.economy-filter-hint {
+  margin-bottom: 4px;
+}
+
 .fleet-table-position-time {
   color: var(--text-muted);
   font-size: 12px;

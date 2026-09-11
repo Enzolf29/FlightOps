@@ -186,7 +186,9 @@ const flightopsApi: FlightopsApi = {
     getCompanyEconomySummary: (companyId: number): Promise<CompanyEconomySummary> =>
       ipcRenderer.invoke(IPC.economy.getCompanyEconomySummary, companyId),
     getAircraftEconomySummary: (aircraftId: number): Promise<CompanyEconomySummary> =>
-      ipcRenderer.invoke(IPC.economy.getAircraftEconomySummary, aircraftId)
+      ipcRenderer.invoke(IPC.economy.getAircraftEconomySummary, aircraftId),
+    getAirportSurcharge: (companyId: number, departureIcao: string): Promise<number> =>
+      ipcRenderer.invoke(IPC.economy.getAirportSurcharge, companyId, departureIcao)
   }
 }
 

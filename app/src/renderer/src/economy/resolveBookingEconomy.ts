@@ -1,6 +1,6 @@
 import { getAirportCoordinates } from '@shared/airports/airportCoordinates'
 import { resolveFlightEconomy } from '@shared/economy/resolveFlightEconomy'
-import { PRICING_TIER_REFERENCE_FARE_PER_NM } from '@shared/types/economy'
+import { PRICING_TIER_FARE_MODEL } from '@shared/types/economy'
 import type { PricingTier, RoutePrice } from '@shared/types/economy'
 import type { CreateFlightFromOfpEconomyInput } from '@shared/types/booking'
 
@@ -17,14 +17,16 @@ export function resolveBookingEconomy(
   routePrice: RoutePrice,
   pricingTier: PricingTier,
   seatCapacity: number,
-  cargoCapacityKg: number
+  cargoCapacityKg: number,
+  airportSurchargeFraction: number
 ): BookingEconomyResolution | null {
   const origin = getAirportCoordinates(routePrice.departureIcao)
   const dest = getAirportCoordinates(routePrice.arrivalIcao)
   if (!origin || !dest) return null
 
   const resolved = resolveFlightEconomy({
-    referenceFarePerNm: PRICING_TIER_REFERENCE_FARE_PER_NM[pricingTier],
+    referenceFareModel: PRICING_TIER_FARE_MODEL[pricingTier],
+    airportSurchargeFraction,
     routePrice,
     originLat: origin.lat,
     originLon: origin.lon,

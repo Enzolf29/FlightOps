@@ -209,6 +209,17 @@ export function getKnownDepartureAirports(companyId: number): Array<{ icao: stri
     .all(companyId) as Array<{ icao: string; lastFetchedAt: string | null }>
 }
 
+/** Nombre de destinations réelles connues (Vols réels/AeroDataBox) pour cette compagnie au départ
+ * de cet aéroport — sert de proxy "taille d'aéroport" pour le mode économie (voir
+ * computeAirportSurcharge). Null si cet aéroport n'a jamais été recherché pour cette compagnie,
+ * distinct de 0 (recherché mais aucune destination trouvée). */
+export function getKnownRouteCountFromAirport(companyId: number, departureIcao: string): number | null {
+  const normalized = departureIcao.trim().toUpperCase()
+  const searched = getKnownDepartureAirports(companyId).some((entry) => entry.icao === normalized)
+  if (!searched) return null
+  return getCachedRoutes(companyId, normalized).length
+}
+
 export function addFlightNumberObservation(routeId: number, flightNumber: string): void {
   getDb()
     .prepare(

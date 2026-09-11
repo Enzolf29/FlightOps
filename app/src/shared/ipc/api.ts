@@ -134,5 +134,6 @@ export interface FlightopsApi {
     getFlightEconomy: (flightId: number) => Promise<FlightEconomy | null>
     getCompanyEconomySummary: (companyId: number) => Promise<CompanyEconomySummary>
     getAircraftEconomySummary: (aircraftId: number) => Promise<CompanyEconomySummary>
+    getAirportSurcharge: (companyId: number, departureIcao: string) => Promise<number>
   }
 }

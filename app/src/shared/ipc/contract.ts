@@ -110,6 +110,7 @@ export const IPC = {
     getRouteGsxCostHint: 'economy:getRouteGsxCostHint',
     getFlightEconomy: 'economy:getFlightEconomy',
     getCompanyEconomySummary: 'economy:getCompanyEconomySummary',
-    getAircraftEconomySummary: 'economy:getAircraftEconomySummary'
+    getAircraftEconomySummary: 'economy:getAircraftEconomySummary',
+    getAirportSurcharge: 'economy:getAirportSurcharge'
   }
 } as const

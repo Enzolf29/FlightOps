@@ -1,5 +1,12 @@
 import { greatCircleDistanceNm } from '../flightStatus/computeFlightDistanceProgress'
-import { REFERENCE_CARGO_PRICE_EUR_PER_KG, type ResolvedFlightEconomy } from '../types/economy'
+import { REFERENCE_CARGO_PRICE_EUR_PER_KG, type PricingTierFareModel, type ResolvedFlightEconomy } from '../types/economy'
+
+/** Prix de référence (le "juste prix") pour une distance donnée : une part fixe par vol (frais
+ * d'aéroport, handling, équipage minimum) plus une part au NM — un modèle purement linéaire
+ * sous-évalue fortement les courts et moyens courriers, voir PRICING_TIER_FARE_MODEL. */
+export function computeReferenceTicketPriceEur(fareModel: PricingTierFareModel, distanceNm: number): number {
+  return fareModel.baseFareEur + fareModel.perNmEur * distanceNm
+}
 
 /** Au-dessus du prix de référence, la demande chute selon une loi de puissance : doubler le prix
  * (ratio 2) divise le remplissage attendu par 2^EXPONENT avant application de l'aléatoire. */
@@ -21,8 +28,10 @@ export function computeLoadFactor(priceRatio: number, random: () => number = Mat
 }
 
 export interface ResolveFlightEconomyInput {
-  /** Tarif de référence €/NM du positionnement de la compagnie (PRICING_TIER_REFERENCE_FARE_PER_NM). */
-  referenceFarePerNm: number
+  /** Modèle de tarif de référence du positionnement de la compagnie (PRICING_TIER_FARE_MODEL). */
+  referenceFareModel: PricingTierFareModel
+  /** Surtaxe "petit aéroport" côté départ (voir computeAirportSurcharge), ex. 0.25 pour +25 %. */
+  airportSurchargeFraction: number
   routePrice: {
     ticketPriceMinEur: number
     ticketPriceMaxEur: number
@@ -47,7 +56,8 @@ export function resolveFlightEconomy(
   random: () => number = Math.random
 ): ResolvedFlightEconomy {
   const distanceNm = greatCircleDistanceNm(input.originLat, input.originLon, input.destLat, input.destLon)
-  const referenceTicketPriceEur = input.referenceFarePerNm * distanceNm
+  const referenceTicketPriceEur =
+    computeReferenceTicketPriceEur(input.referenceFareModel, distanceNm) * (1 + input.airportSurchargeFraction)
   const referenceCargoPriceEurPerKg = REFERENCE_CARGO_PRICE_EUR_PER_KG
 
   const ticketPriceEur =

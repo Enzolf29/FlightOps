@@ -59,6 +59,16 @@ export function useAircraftEconomySummary(aircraftId: number | null) {
   })
 }
 
+/** Surtaxe "petit aéroport" (voir computeAirportSurcharge), basée sur le nombre de destinations
+ * réelles connues (Vols réels) pour cette compagnie au départ de cet aéroport. */
+export function useAirportSurcharge(companyId: number | null, departureIcao: string, enabled: boolean) {
+  return useQuery<number>({
+    queryKey: ['economy', 'airportSurcharge', companyId, departureIcao],
+    queryFn: () => window.flightops.economy.getAirportSurcharge(companyId as number, departureIcao),
+    enabled: enabled && companyId !== null && departureIcao.trim().length >= 3
+  })
+}
+
 export function useUpsertRoutePrice() {
   const queryClient = useQueryClient()
   return useMutation({

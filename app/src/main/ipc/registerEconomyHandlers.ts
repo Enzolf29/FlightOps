@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { IPC } from '@shared/ipc/contract'
 import type { CompanyEconomySummary, FlightEconomy, RoutePrice, RoutePriceInput } from '@shared/types/economy'
+import { computeAirportSurcharge } from '@shared/economy/computeAirportSurcharge'
 import {
   deleteRoutePrice,
   getAircraftEconomySummary,
@@ -11,6 +12,7 @@ import {
   listRoutePricesForCompany,
   upsertRoutePrice
 } from '../db/repositories/economyRepository'
+import { getKnownRouteCountFromAirport } from '../db/repositories/realRoutesRepository'
 
 export function registerEconomyHandlers(): void {
   ipcMain.handle(IPC.economy.listRoutePrices, (_event, companyId: number): RoutePrice[] =>
@@ -43,5 +45,9 @@ export function registerEconomyHandlers(): void {
 
   ipcMain.handle(IPC.economy.getAircraftEconomySummary, (_event, aircraftId: number): CompanyEconomySummary =>
     getAircraftEconomySummary(aircraftId)
+  )
+
+  ipcMain.handle(IPC.economy.getAirportSurcharge, (_event, companyId: number, departureIcao: string): number =>
+    computeAirportSurcharge(getKnownRouteCountFromAirport(companyId, departureIcao))
   )
 }

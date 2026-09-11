@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useRoutePrice } from '@renderer/hooks/useEconomy'
+import { useAirportSurcharge, useRoutePrice } from '@renderer/hooks/useEconomy'
 import { resolveBookingEconomy, type BookingEconomyResolution } from '@renderer/economy/resolveBookingEconomy'
 import type { PricingTier } from '@shared/types/economy'
 
@@ -29,15 +29,19 @@ export function EconomyBookingPanel({
 }: EconomyBookingPanelProps) {
   const ready = companyId !== null && pricingTier !== null && seatCapacity !== null && cargoCapacityKg !== null
   const { data: routePrice } = useRoutePrice(companyId, departureIcao, arrivalIcao, ready)
+  const { data: airportSurcharge } = useAirportSurcharge(companyId, departureIcao, ready)
   const [enabled, setEnabled] = useState(true)
 
-  // Figé une fois calculé (dépendance sur l'id de la ligne, pas sur les valeurs à chaque rendu) :
-  // le prix réellement tiré au sort ne doit pas changer à chaque re-rendu du formulaire.
+  // Figé une fois calculé (dépendance sur l'id de la ligne et la surtaxe, pas sur les valeurs à
+  // chaque rendu) : le prix réellement tiré au sort ne doit pas changer à chaque re-rendu du
+  // formulaire.
   const resolution = useMemo<BookingEconomyResolution | null>(() => {
-    if (!routePrice || !pricingTier || seatCapacity === null || cargoCapacityKg === null) return null
-    return resolveBookingEconomy(routePrice, pricingTier, seatCapacity, cargoCapacityKg)
+    if (!routePrice || !pricingTier || seatCapacity === null || cargoCapacityKg === null || airportSurcharge === undefined) {
+      return null
+    }
+    return resolveBookingEconomy(routePrice, pricingTier, seatCapacity, cargoCapacityKg, airportSurcharge)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routePrice?.id])
+  }, [routePrice?.id, airportSurcharge])
 
   useEffect(() => {
     onResolutionChange(enabled ? resolution : null)
@@ -60,7 +64,11 @@ export function EconomyBookingPanel({
         <div className="economy-booking-preview">
           <span>
             Billet {formatEur(resolution.economyInput.ticketPriceEur)}
-            <small> (référence {formatEur(resolution.economyInput.referenceTicketPriceEur)})</small>
+            <small>
+              {' '}
+              (référence {formatEur(resolution.economyInput.referenceTicketPriceEur)}
+              {airportSurcharge ? ` · +${Math.round(airportSurcharge * 100)}% petit aéroport` : ''})
+            </small>
           </span>
           <span>≈ {resolution.expectedPassengers} passagers attendus</span>
           <span>

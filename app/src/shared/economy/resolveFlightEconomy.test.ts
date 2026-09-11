@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { computeLoadFactor, resolveFlightEconomy } from './resolveFlightEconomy'
+import { computeLoadFactor, computeReferenceTicketPriceEur, resolveFlightEconomy } from './resolveFlightEconomy'
+import { PRICING_TIER_FARE_MODEL } from '../types/economy'
+import { greatCircleDistanceNm } from '../flightStatus/computeFlightDistanceProgress'
 
 /** Retourne les valeurs fournies dans l'ordre à chaque appel, pour des tests déterministes. */
 function sequenceRandom(values: number[]): () => number {
@@ -32,9 +34,31 @@ describe('computeLoadFactor', () => {
   })
 })
 
+describe('computeReferenceTicketPriceEur', () => {
+  it('keeps a realistic floor for short/medium routes thanks to the fixed base fare', () => {
+    // Brest (LFRB) -> Paris CDG (LFPG), ~278 NM à vol d'oiseau — vraies fourchettes observées :
+    // 80-250€ selon le sens. Un modèle purement distance × tarif donnerait ~42€ (bien trop bas) ;
+    // la part fixe ramène la référence dans une fourchette plausible.
+    const distanceNm = greatCircleDistanceNm(48.4479, -4.4185, 49.009, 2.5541)
+    const reference = computeReferenceTicketPriceEur(PRICING_TIER_FARE_MODEL.classic, distanceNm)
+    expect(reference).toBeGreaterThan(80)
+    expect(reference).toBeLessThan(180)
+  })
+
+  it('scales up with distance on top of the fixed base fare', () => {
+    const short = computeReferenceTicketPriceEur(PRICING_TIER_FARE_MODEL.classic, 100)
+    const long = computeReferenceTicketPriceEur(PRICING_TIER_FARE_MODEL.classic, 1000)
+    expect(long).toBeGreaterThan(short)
+    expect(short).toBeGreaterThan(PRICING_TIER_FARE_MODEL.classic.baseFareEur)
+  })
+})
+
 describe('resolveFlightEconomy', () => {
   const baseInput = {
-    referenceFarePerNm: 0.1,
+    // Base à 0 dans ces tests : on isole l'effet de la part au NM (déjà couverte séparément
+    // ci-dessus) pour ne pas casser les valeurs numériques attendues plus bas.
+    referenceFareModel: { baseFareEur: 0, perNmEur: 0.1 },
+    airportSurchargeFraction: 0,
     routePrice: {
       ticketPriceMinEur: 80,
       ticketPriceMaxEur: 120,
@@ -63,6 +87,15 @@ describe('resolveFlightEconomy', () => {
     // ~400 NM à vol d'oiseau × 0,1 €/NM -> référence de l'ordre de 30-50€
     expect(result.referenceTicketPriceEur).toBeGreaterThan(20)
     expect(result.referenceTicketPriceEur).toBeLessThan(60)
+  })
+
+  it('raises the reference ticket price by the airport surcharge fraction', () => {
+    const withoutSurcharge = resolveFlightEconomy(baseInput, sequenceRandom([0, 0, 0.5, 0.5]))
+    const withSurcharge = resolveFlightEconomy(
+      { ...baseInput, airportSurchargeFraction: 0.25 },
+      sequenceRandom([0, 0, 0.5, 0.5])
+    )
+    expect(withSurcharge.referenceTicketPriceEur).toBeCloseTo(withoutSurcharge.referenceTicketPriceEur * 1.25, 1)
   })
 
   it('yields far fewer expected passengers when priced well above the reference than at the floor price', () => {
