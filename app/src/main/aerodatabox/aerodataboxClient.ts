@@ -113,6 +113,11 @@ export async function getAirportDepartures(apiKey: string, departureIcao: string
   if (response.status === 404) {
     throw new AerodataboxFetchError(`Aucun horaire trouvé pour l'aéroport ${normalized}.`)
   }
+  if (response.status === 429) {
+    throw new AerodataboxFetchError(
+      'Trop de requêtes AeroDataBox pour le moment (quota de l’offre atteint) — réessayez dans quelques minutes.'
+    )
+  }
   if (!response.ok) {
     throw new AerodataboxFetchError(`AeroDataBox a répondu avec une erreur (HTTP ${response.status})`)
   }

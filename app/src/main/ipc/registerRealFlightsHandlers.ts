@@ -21,6 +21,13 @@ import { getAirportDepartures, type AerodataboxDeparture } from '../aerodatabox/
 import { lookupAircraftByRegistration } from '../adsbdb/adsbdbClient'
 
 const MAX_COMPANY_REFRESH_AIRPORTS = 5
+/** Pause entre deux appels AeroDataBox successifs d'un même rafraîchissement compagnie, pour rester
+ * sous les limites de débit par seconde des offres RapidAPI courantes. */
+const COMPANY_REFRESH_STEP_DELAY_MS = 600
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 function makeObservation(departure: AerodataboxDeparture): RealRouteObservationInput {
   const observedAt = departure.scheduledDepartureUtc ?? departure.scheduledArrivalUtc ?? new Date().toISOString()
@@ -176,14 +183,17 @@ async function refreshCompanyRoutes(companyId: number): Promise<RealRouteSearchR
     }
   }
 
-  // Aucun cooldown : chaque clic interroge immédiatement l'API. La requête compagnie reste
-  // limitée à cinq aéroports et le dépôt les classe du cache le plus ancien au plus récent ; des
-  // clics successifs font donc tourner progressivement l'ensemble du réseau connu.
+  // Aucun cooldown entre clics : chaque clic interroge immédiatement l'API. La requête compagnie
+  // reste limitée à cinq aéroports et le dépôt les classe du cache le plus ancien au plus récent ;
+  // des clics successifs font donc tourner progressivement l'ensemble du réseau connu. En revanche,
+  // les cinq appels d'un même clic sont espacés : les offres RapidAPI d'AeroDataBox limitent souvent
+  // le débit par seconde, et cinq requêtes tirées d'un coup suffisaient à déclencher un HTTP 429.
   const eligible = knownAirports.slice(0, MAX_COMPANY_REFRESH_AIRPORTS)
 
   const refreshedAirports: string[] = []
-  for (const airport of eligible) {
-    const result = await searchRealRoutes(companyId, airport.icao, true)
+  for (let index = 0; index < eligible.length; index += 1) {
+    if (index > 0) await delay(COMPANY_REFRESH_STEP_DELAY_MS)
+    const result = await searchRealRoutes(companyId, eligible[index].icao, true)
     refreshedAirports.push(...result.refreshedAirports)
   }
 
