@@ -99,6 +99,17 @@ export const IPC = {
   gsx: {
     getReceiptsForFlight: 'gsx:getReceiptsForFlight',
     readReceiptHtml: 'gsx:readReceiptHtml',
-    getCostStatsForAircraft: 'gsx:getCostStatsForAircraft'
+    getCostStatsForAircraft: 'gsx:getCostStatsForAircraft',
+    excludeReceipt: 'gsx:excludeReceipt'
+  },
+  economy: {
+    listRoutePrices: 'economy:listRoutePrices',
+    getRoutePrice: 'economy:getRoutePrice',
+    upsertRoutePrice: 'economy:upsertRoutePrice',
+    deleteRoutePrice: 'economy:deleteRoutePrice',
+    getRouteGsxCostHint: 'economy:getRouteGsxCostHint',
+    getFlightEconomy: 'economy:getFlightEconomy',
+    getCompanyEconomySummary: 'economy:getCompanyEconomySummary',
+    getAircraftEconomySummary: 'economy:getAircraftEconomySummary'
   }
 } as const

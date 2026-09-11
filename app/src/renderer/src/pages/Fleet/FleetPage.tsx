@@ -3,6 +3,7 @@ import { useCompanies, useUpdateCompany } from '@renderer/hooks/useCompanies'
 import { useAircraft, useCreateAircraft, useUpdateAircraft, useDeleteAircraft } from '@renderer/hooks/useAircraft'
 import { usePirepsByAircraft } from '@renderer/hooks/usePireps'
 import { useGsxCostStatsForAircraft } from '@renderer/hooks/useGsxCostStatsForAircraft'
+import { useAircraftEconomySummary } from '@renderer/hooks/useEconomy'
 import { CompanyLogo } from '@renderer/components/CompanyLogo'
 import { Modal } from '@renderer/components/Modal'
 import { AircraftForm } from '@renderer/components/AircraftForm'
@@ -14,6 +15,7 @@ import { formatEur, formatHours, formatDateTime } from '@renderer/lib/format'
 import { getAirportLabel } from '@shared/airports/airportNames'
 import type { AircraftInput, AircraftWithStats } from '@shared/types/aircraft'
 import type { CallsignPattern, Company } from '@shared/types/company'
+import { PRICING_TIERS, PRICING_TIER_LABEL, type PricingTier } from '@shared/types/economy'
 
 type Tab = 'aircraft' | 'companies'
 
@@ -300,6 +302,7 @@ interface AircraftFlightsModalProps {
 function AircraftFlightsModal({ aircraft, onClose }: AircraftFlightsModalProps) {
   const { data: pireps, isLoading } = usePirepsByAircraft(aircraft.id)
   const { data: gsxCosts } = useGsxCostStatsForAircraft(aircraft.id, true)
+  const { data: economySummary } = useAircraftEconomySummary(aircraft.id)
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
   const selected = pireps?.find((pirep) => pirep.id === selectedId) ?? null
@@ -376,6 +379,16 @@ function AircraftFlightsModal({ aircraft, onClose }: AircraftFlightsModalProps) 
             value: gsxCosts && gsxCosts.flightsWithData > 0 ? formatEur(gsxCosts.totalEur) : '—',
             detail: gsxCosts && gsxCosts.flightsWithData > 0 ? `Sur ${gsxCosts.flightsWithData} vol${gsxCosts.flightsWithData > 1 ? 's' : ''}` : undefined,
             icon: <DollarSignIcon />
+          },
+          {
+            key: 'profit',
+            label: 'Bénéfice (mode économie)',
+            value: economySummary && economySummary.flightsWithData > 0 ? formatEur(economySummary.profitEur) : '—',
+            detail:
+              economySummary && economySummary.flightsWithData > 0
+                ? `Sur ${economySummary.flightsWithData} vol${economySummary.flightsWithData > 1 ? 's' : ''} tarifés`
+                : undefined,
+            icon: <DollarSignIcon />
           }
           ]}
         />
@@ -412,19 +425,21 @@ function CompaniesTab() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [radioCallsign, setRadioCallsign] = useState('')
   const [callsignPattern, setCallsignPattern] = useState<CallsignPattern>('XXX0000')
+  const [pricingTier, setPricingTier] = useState<PricingTier>('classic')
   const [error, setError] = useState<string | null>(null)
 
   function startEdit(company: Company) {
     setEditingId(company.id)
     setRadioCallsign(company.radioCallsign)
     setCallsignPattern(company.callsignPattern)
+    setPricingTier(company.pricingTier)
     setError(null)
   }
 
   function save(id: number) {
     setError(null)
     updateMutation
-      .mutateAsync({ id, patch: { radioCallsign: radioCallsign.trim(), callsignPattern } })
+      .mutateAsync({ id, patch: { radioCallsign: radioCallsign.trim(), callsignPattern, pricingTier } })
       .then(() => setEditingId(null))
       .catch((err: Error) => setError(err.message))
   }
@@ -445,6 +460,7 @@ function CompaniesTab() {
           <span>IATA</span>
           <span>Callsign radio</span>
           <span>Pattern</span>
+          <span>Positionnement</span>
           <span></span>
         </div>
         {companies.map((company) => (
@@ -472,6 +488,15 @@ function CompaniesTab() {
                     ))}
                   </select>
                 </span>
+                <span>
+                  <select value={pricingTier} onChange={(event) => setPricingTier(event.target.value as PricingTier)}>
+                    {PRICING_TIERS.map((tier) => (
+                      <option key={tier} value={tier}>
+                        {PRICING_TIER_LABEL[tier]}
+                      </option>
+                    ))}
+                  </select>
+                </span>
                 <span className="fleet-table-actions">
                   <button
                     type="button"
@@ -490,6 +515,7 @@ function CompaniesTab() {
               <>
                 <span>{company.radioCallsign}</span>
                 <span>{CALLSIGN_PATTERN_LABEL[company.callsignPattern]}</span>
+                <span>{PRICING_TIER_LABEL[company.pricingTier]}</span>
                 <span className="fleet-table-actions">
                   <button type="button" onClick={() => startEdit(company)}>
                     Modifier

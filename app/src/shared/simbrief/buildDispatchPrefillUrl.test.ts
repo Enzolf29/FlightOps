@@ -37,6 +37,38 @@ describe('buildDispatchPrefillUrl', () => {
     expect(url.searchParams.get('reg')).toBe('F-HZUK')
   })
 
+  it('inclut pax/cargo (mode économie) quand fournis, en convertissant le fret en tonnes', () => {
+    const url = new URL(
+      buildDispatchPrefillUrl({
+        originIcao: 'LFPG',
+        destIcao: 'LFRB',
+        aircraftIcaoType: 'A20N',
+        airlineIcao: 'AFR',
+        scheduledDeparture: new Date('2026-07-31T10:00:00Z'),
+        paxCount: 142,
+        cargoTons: 1.5
+      })
+    )
+
+    expect(url.searchParams.get('pax')).toBe('142')
+    expect(url.searchParams.get('cargo')).toBe('1.50')
+  })
+
+  it('omet pax/cargo quand non fournis (vol hors mode économie)', () => {
+    const url = new URL(
+      buildDispatchPrefillUrl({
+        originIcao: 'LFPG',
+        destIcao: 'LFRB',
+        aircraftIcaoType: 'A20N',
+        airlineIcao: 'AFR',
+        scheduledDeparture: new Date('2026-07-31T10:00:00Z')
+      })
+    )
+
+    expect(url.searchParams.has('pax')).toBe(false)
+    expect(url.searchParams.has('cargo')).toBe(false)
+  })
+
   it('envoie la date UTC à SimBrief même lorsque le jour local est déjà le suivant', () => {
     const url = new URL(
       buildDispatchPrefillUrl({

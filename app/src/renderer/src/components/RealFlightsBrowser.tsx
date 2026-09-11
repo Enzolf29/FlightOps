@@ -24,6 +24,9 @@ import {
 import { CompanyPicker } from './CompanyPicker'
 import { Modal } from './Modal'
 import { RealFlightsMap } from './RealFlightsMap'
+import { EconomyBookingPanel } from './EconomyBookingPanel'
+import { useEconomyBookingStore } from '@renderer/stores/economyBookingStore'
+import type { BookingEconomyResolution } from '@renderer/economy/resolveBookingEconomy'
 
 type SortKey = 'destination' | 'duration' | 'aircraftCount' | 'frequency'
 type SortDirection = 'asc' | 'desc'
@@ -415,6 +418,7 @@ function BookRealRouteModal({ route, company, onClose, onGenerated }: {
   const [time, setTime] = useState(defaultDeparture.time)
   const [generated, setGenerated] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [economyResolution, setEconomyResolution] = useState<BookingEconomyResolution | null>(null)
   const selectedAircraft = fleetAircraft?.find((item) => item.id === aircraftId) ?? null
 
   useEffect(() => { if (defaultAircraft && aircraftId === null) setAircraftId(defaultAircraft.id) }, [defaultAircraft, aircraftId])
@@ -436,6 +440,14 @@ function BookRealRouteModal({ route, company, onClose, onGenerated }: {
     const scheduledArrival = new Date(scheduledDeparture.getTime() + (route.typicalDurationMinutes ?? 90) * 60000)
     const { raw: callsign } = generateCallsign({ icaoCode: company.icaoCode, radioCallsign: company.radioCallsign, pattern: company.callsignPattern })
     setError(null)
+    if (economyResolution) {
+      useEconomyBookingStore.getState().setPending({
+        companyId: company.id,
+        departureIcao: route.departureIcao.toUpperCase(),
+        arrivalIcao: route.arrivalIcao.toUpperCase(),
+        economy: economyResolution.economyInput
+      })
+    }
     window.flightops.app.openExternal(buildDispatchPrefillUrl({
       originIcao: route.departureIcao,
       destIcao: route.arrivalIcao,
@@ -446,7 +458,9 @@ function BookRealRouteModal({ route, company, onClose, onGenerated }: {
       simbriefFin: selectedAircraft.simbriefFin,
       callsign,
       scheduledDeparture,
-      scheduledArrival
+      scheduledArrival,
+      paxCount: economyResolution?.expectedPassengers,
+      cargoTons: economyResolution ? economyResolution.expectedCargoKg / 1000 : undefined
     }))
     setGenerated(true)
   }
@@ -471,6 +485,15 @@ function BookRealRouteModal({ route, company, onClose, onGenerated }: {
           <label className="form-field"><span>Date de départ (UTC)</span><input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
           <label className="form-field"><span>Heure de départ (UTC)</span><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /></label>
           <p className="form-hint">Durée de vol typique : {formatDuration(route.typicalDurationMinutes)}</p>
+          <EconomyBookingPanel
+            companyId={company.id}
+            pricingTier={company.pricingTier}
+            departureIcao={route.departureIcao}
+            arrivalIcao={route.arrivalIcao}
+            seatCapacity={selectedAircraft?.seatCapacity ?? null}
+            cargoCapacityKg={selectedAircraft?.cargoCapacityKg ?? null}
+            onResolutionChange={setEconomyResolution}
+          />
           {error ? <p className="form-error">{error}</p> : null}
           <div className="form-actions"><button type="button" onClick={onClose}>Annuler</button><button type="button" className="primary" onClick={handleGenerate}>Générer le plan sur SimBrief</button></div>
         </div>

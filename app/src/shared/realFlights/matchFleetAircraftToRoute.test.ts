@@ -13,6 +13,8 @@ function aircraft(overrides: Partial<AircraftWithStats> = {}): AircraftWithStats
     simbriefFin: null,
     modeS: null,
     notes: null,
+    seatCapacity: 140,
+    cargoCapacityKg: 1200,
     company: { icaoCode: 'AFR', displayName: 'Air France', logoFilename: 'air-france.svg' },
     flightCount: 0,
     cumulativeHours: 0,

@@ -37,6 +37,7 @@ import { getTabletServerInfo, startTabletServer, stopTabletServer } from './tabl
 import { registerUpdateHandlers } from './ipc/registerUpdateHandlers'
 import { startAppUpdater, stopAppUpdater } from './updater/appUpdater'
 import { registerGsxHandlers } from './ipc/registerGsxHandlers'
+import { registerEconomyHandlers } from './ipc/registerEconomyHandlers'
 
 registerCabinAnnouncementScheme()
 registerSimbriefPdfScheme()
@@ -70,6 +71,7 @@ app.whenReady().then(() => {
   registerTabletHandlers()
   registerUpdateHandlers()
   registerGsxHandlers()
+  registerEconomyHandlers()
   startAppUpdater()
 
   void startTabletServer()

@@ -3,7 +3,8 @@ import { IPC } from '@shared/ipc/contract'
 import type { GsxReceipt, GsxCostStats } from '@shared/types/gsxReceipt'
 import { getFlightWithRelationsById } from '../db/repositories/flightRepository'
 import { getGsxCostStatsForAircraft } from '../db/repositories/statsRepository'
-import { getGsxReceiptsForFlight, readGsxReceiptHtml } from '../gsx/gsxReceiptsRepository'
+import { claimGsxReceiptsForFlight, excludeGsxReceipt } from '../db/repositories/gsxReceiptLinksRepository'
+import { readGsxReceiptHtml } from '../gsx/gsxReceiptsRepository'
 
 export function registerGsxHandlers(): void {
   ipcMain.handle(
@@ -11,7 +12,7 @@ export function registerGsxHandlers(): void {
     (_event, flightId: number, referenceEndIso?: string | null): GsxReceipt[] => {
       const flight = getFlightWithRelationsById(flightId)
       if (!flight) return []
-      return getGsxReceiptsForFlight(flight, referenceEndIso ?? null)
+      return claimGsxReceiptsForFlight(flightId, flight, referenceEndIso ?? new Date().toISOString())
     }
   )
 
@@ -20,4 +21,6 @@ export function registerGsxHandlers(): void {
   ipcMain.handle(IPC.gsx.getCostStatsForAircraft, (_event, aircraftId: number): GsxCostStats =>
     getGsxCostStatsForAircraft(aircraftId)
   )
+
+  ipcMain.handle(IPC.gsx.excludeReceipt, (_event, receiptId: string): void => excludeGsxReceipt(receiptId))
 }

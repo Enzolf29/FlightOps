@@ -18,6 +18,7 @@ import type { CabinAnnouncementFile, CabinAnnouncementType } from '@shared/types
 import type { TabletCabinCommand, TabletCabinStatus, TabletServerInfo } from '@shared/types/tablet'
 import type { AppUpdateStatus } from '@shared/types/appUpdate'
 import type { GsxCostStats, GsxReceipt } from '@shared/types/gsxReceipt'
+import type { CompanyEconomySummary, FlightEconomy, RoutePrice, RoutePriceInput } from '@shared/types/economy'
 import type { FlightopsApi } from '@shared/ipc/api'
 
 const flightopsApi: FlightopsApi = {
@@ -165,7 +166,27 @@ const flightopsApi: FlightopsApi = {
       ipcRenderer.invoke(IPC.gsx.getReceiptsForFlight, flightId, referenceEndIso),
     readReceiptHtml: (htmlPath: string): Promise<string | null> => ipcRenderer.invoke(IPC.gsx.readReceiptHtml, htmlPath),
     getCostStatsForAircraft: (aircraftId: number): Promise<GsxCostStats> =>
-      ipcRenderer.invoke(IPC.gsx.getCostStatsForAircraft, aircraftId)
+      ipcRenderer.invoke(IPC.gsx.getCostStatsForAircraft, aircraftId),
+    excludeReceipt: (receiptId: string): Promise<void> => ipcRenderer.invoke(IPC.gsx.excludeReceipt, receiptId)
+  },
+  economy: {
+    listRoutePrices: (companyId: number): Promise<RoutePrice[]> => ipcRenderer.invoke(IPC.economy.listRoutePrices, companyId),
+    getRoutePrice: (companyId: number, departureIcao: string, arrivalIcao: string): Promise<RoutePrice | null> =>
+      ipcRenderer.invoke(IPC.economy.getRoutePrice, companyId, departureIcao, arrivalIcao),
+    upsertRoutePrice: (input: RoutePriceInput): Promise<RoutePrice> => ipcRenderer.invoke(IPC.economy.upsertRoutePrice, input),
+    deleteRoutePrice: (id: number): Promise<void> => ipcRenderer.invoke(IPC.economy.deleteRoutePrice, id),
+    getRouteGsxCostHint: (
+      companyId: number,
+      departureIcao: string,
+      arrivalIcao: string
+    ): Promise<{ averageGsxCostEur: number | null; flightsFlown: number }> =>
+      ipcRenderer.invoke(IPC.economy.getRouteGsxCostHint, companyId, departureIcao, arrivalIcao),
+    getFlightEconomy: (flightId: number): Promise<FlightEconomy | null> =>
+      ipcRenderer.invoke(IPC.economy.getFlightEconomy, flightId),
+    getCompanyEconomySummary: (companyId: number): Promise<CompanyEconomySummary> =>
+      ipcRenderer.invoke(IPC.economy.getCompanyEconomySummary, companyId),
+    getAircraftEconomySummary: (aircraftId: number): Promise<CompanyEconomySummary> =>
+      ipcRenderer.invoke(IPC.economy.getAircraftEconomySummary, aircraftId)
   }
 }
 

@@ -15,6 +15,7 @@ import type { CabinAnnouncementFile, CabinAnnouncementType } from '../types/cabi
 import type { TabletCabinCommand, TabletCabinStatus, TabletServerInfo } from '../types/tablet'
 import type { AppUpdateStatus } from '../types/appUpdate'
 import type { GsxCostStats, GsxReceipt } from '../types/gsxReceipt'
+import type { CompanyEconomySummary, FlightEconomy, RoutePrice, RoutePriceInput } from '../types/economy'
 
 export interface FlightopsApi {
   home: {
@@ -118,5 +119,20 @@ export interface FlightopsApi {
     getReceiptsForFlight: (flightId: number, referenceEndIso?: string | null) => Promise<GsxReceipt[]>
     readReceiptHtml: (htmlPath: string) => Promise<string | null>
     getCostStatsForAircraft: (aircraftId: number) => Promise<GsxCostStats>
+    excludeReceipt: (receiptId: string) => Promise<void>
+  }
+  economy: {
+    listRoutePrices: (companyId: number) => Promise<RoutePrice[]>
+    getRoutePrice: (companyId: number, departureIcao: string, arrivalIcao: string) => Promise<RoutePrice | null>
+    upsertRoutePrice: (input: RoutePriceInput) => Promise<RoutePrice>
+    deleteRoutePrice: (id: number) => Promise<void>
+    getRouteGsxCostHint: (
+      companyId: number,
+      departureIcao: string,
+      arrivalIcao: string
+    ) => Promise<{ averageGsxCostEur: number | null; flightsFlown: number }>
+    getFlightEconomy: (flightId: number) => Promise<FlightEconomy | null>
+    getCompanyEconomySummary: (companyId: number) => Promise<CompanyEconomySummary>
+    getAircraftEconomySummary: (aircraftId: number) => Promise<CompanyEconomySummary>
   }
 }

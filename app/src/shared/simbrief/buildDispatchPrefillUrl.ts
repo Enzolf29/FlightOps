@@ -19,6 +19,10 @@ export interface DispatchPrefillParams {
   callsign?: string | null
   scheduledDeparture: Date
   scheduledArrival?: Date | null
+  /** Mode économie : nombre de passagers/kg de fret attendus (voir resolveFlightEconomy), pour que
+   * le plan généré par SimBrief reflète la demande simulée plutôt qu'un remplissage par défaut. */
+  paxCount?: number | null
+  cargoTons?: number | null
 }
 
 /**
@@ -48,6 +52,13 @@ export function buildDispatchPrefillUrl(params: DispatchPrefillParams): string {
   url.searchParams.set('date', formatInTimeZone(params.scheduledDeparture, 'UTC', 'ddLLLyy').toUpperCase())
   url.searchParams.set('deph', String(params.scheduledDeparture.getUTCHours()))
   url.searchParams.set('depm', String(params.scheduledDeparture.getUTCMinutes()))
+
+  if (params.paxCount !== undefined && params.paxCount !== null) {
+    url.searchParams.set('pax', String(Math.max(0, Math.round(params.paxCount))))
+  }
+  if (params.cargoTons !== undefined && params.cargoTons !== null) {
+    url.searchParams.set('cargo', (Math.max(0, params.cargoTons)).toFixed(2))
+  }
 
   if (params.scheduledArrival) {
     const durationMinutesTotal = Math.round(

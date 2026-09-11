@@ -21,6 +21,8 @@ import migration019 from './migrations/019_cabin_announcement_volume.sql?raw'
 import migration020 from './migrations/020_real_route_observations.sql?raw'
 import migration021 from './migrations/021_repair_utc_schedule_day.sql?raw'
 import migration022 from './migrations/022_group_embraer_route_families.sql?raw'
+import migration023 from './migrations/023_economy.sql?raw'
+import migration024 from './migrations/024_gsx_receipt_links.sql?raw'
 
 interface Migration {
   version: number
@@ -49,7 +51,9 @@ const MIGRATIONS: Migration[] = [
   { version: 19, sql: migration019 },
   { version: 20, sql: migration020 },
   { version: 21, sql: migration021 },
-  { version: 22, sql: migration022 }
+  { version: 22, sql: migration022 },
+  { version: 23, sql: migration023 },
+  { version: 24, sql: migration024 }
 ]
 
 export function runMigrations(db: Database.Database): void {

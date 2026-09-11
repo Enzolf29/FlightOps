@@ -12,6 +12,8 @@ interface AircraftStatsRow {
   simbrief_fin: string | null
   mode_s: string | null
   notes: string | null
+  seat_capacity: number
+  cargo_capacity_kg: number
   company_icao_code: string
   company_display_name: string
   company_logo_filename: string
@@ -31,6 +33,7 @@ interface AircraftStatsRow {
 const SELECT_WITH_STATS = `
   SELECT
     a.id, a.company_id, a.type, a.registration, a.simbrief_icao_code, a.simbrief_fin, a.mode_s, a.notes,
+    a.seat_capacity, a.cargo_capacity_kg,
     c.icao_code AS company_icao_code, c.display_name AS company_display_name, c.logo_filename AS company_logo_filename,
     COUNT(p.id) AS flight_count,
     COALESCE(SUM(p.flight_time_minutes), 0) AS total_minutes,
@@ -123,6 +126,8 @@ function mapAircraft(row: AircraftStatsRow): AircraftWithStats {
     simbriefFin: row.simbrief_fin,
     modeS: row.mode_s,
     notes: row.notes,
+    seatCapacity: row.seat_capacity,
+    cargoCapacityKg: row.cargo_capacity_kg,
     company: {
       icaoCode: row.company_icao_code,
       displayName: row.company_display_name,
@@ -156,6 +161,8 @@ interface PlainAircraftRow {
   simbrief_fin: string | null
   mode_s: string | null
   notes: string | null
+  seat_capacity: number
+  cargo_capacity_kg: number
 }
 
 function mapPlainAircraft(row: PlainAircraftRow): Aircraft {
@@ -167,14 +174,18 @@ function mapPlainAircraft(row: PlainAircraftRow): Aircraft {
     simbriefIcaoCode: row.simbrief_icao_code,
     simbriefFin: row.simbrief_fin,
     modeS: row.mode_s,
-    notes: row.notes
+    notes: row.notes,
+    seatCapacity: row.seat_capacity,
+    cargoCapacityKg: row.cargo_capacity_kg
   }
 }
 
 export function createAircraft(input: AircraftInput): Aircraft {
   const result = getDb()
     .prepare(
-      'INSERT INTO aircraft (company_id, type, registration, simbrief_icao_code, simbrief_fin, mode_s, notes) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      `INSERT INTO aircraft
+        (company_id, type, registration, simbrief_icao_code, simbrief_fin, mode_s, notes, seat_capacity, cargo_capacity_kg)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       input.companyId,
@@ -183,7 +194,9 @@ export function createAircraft(input: AircraftInput): Aircraft {
       input.simbriefIcaoCode,
       input.simbriefFin,
       input.modeS,
-      input.notes
+      input.notes,
+      input.seatCapacity,
+      input.cargoCapacityKg
     )
 
   const row = getDb().prepare('SELECT * FROM aircraft WHERE id = ?').get(result.lastInsertRowid) as PlainAircraftRow
@@ -203,12 +216,15 @@ export function updateAircraft(id: number, patch: AircraftPatch): Aircraft {
     simbrief_icao_code: patch.simbriefIcaoCode !== undefined ? patch.simbriefIcaoCode : current.simbrief_icao_code,
     simbrief_fin: patch.simbriefFin !== undefined ? patch.simbriefFin : current.simbrief_fin,
     mode_s: patch.modeS !== undefined ? patch.modeS : current.mode_s,
-    notes: patch.notes !== undefined ? patch.notes : current.notes
+    notes: patch.notes !== undefined ? patch.notes : current.notes,
+    seat_capacity: patch.seatCapacity ?? current.seat_capacity,
+    cargo_capacity_kg: patch.cargoCapacityKg ?? current.cargo_capacity_kg
   }
 
   getDb()
     .prepare(
-      'UPDATE aircraft SET company_id = ?, type = ?, registration = ?, simbrief_icao_code = ?, simbrief_fin = ?, mode_s = ?, notes = ? WHERE id = ?'
+      `UPDATE aircraft SET company_id = ?, type = ?, registration = ?, simbrief_icao_code = ?, simbrief_fin = ?,
+        mode_s = ?, notes = ?, seat_capacity = ?, cargo_capacity_kg = ? WHERE id = ?`
     )
     .run(
       next.company_id,
@@ -218,6 +234,8 @@ export function updateAircraft(id: number, patch: AircraftPatch): Aircraft {
       next.simbrief_fin,
       next.mode_s,
       next.notes,
+      next.seat_capacity,
+      next.cargo_capacity_kg,
       id
     )
 

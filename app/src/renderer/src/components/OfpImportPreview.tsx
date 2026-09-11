@@ -5,6 +5,7 @@ import type { AircraftWithStats } from '@shared/types/aircraft'
 import type { FlightWithRelations, FlightSource } from '@shared/types/flight'
 import { useAircraft } from '@renderer/hooks/useAircraft'
 import { useCreateBookingFromOfp } from '@renderer/hooks/useBooking'
+import { useEconomyBookingStore } from '@renderer/stores/economyBookingStore'
 import { CompanyLogo } from '@renderer/components/CompanyLogo'
 import { getAirportLabel } from '@shared/airports/airportNames'
 import { formatDateTime } from '@renderer/lib/format'
@@ -78,6 +79,9 @@ export function OfpImportPreview({ ofp, companies, source, onCreated }: OfpImpor
   function handleImport() {
     if (!resolution?.ok) return
     const trimmedAlternate = alternateIcao.trim().toUpperCase()
+    const economy = useEconomyBookingStore
+      .getState()
+      .consumeIfMatches(resolution.data.company.id, ofp.departureIcao, ofp.arrivalIcao)
     createMutation
       .mutateAsync({
         companyId: resolution.data.company.id,
@@ -91,7 +95,8 @@ export function OfpImportPreview({ ofp, companies, source, onCreated }: OfpImpor
         scheduledArrivalUtc: ofp.scheduledArrivalUtc,
         route: ofp.route,
         simbriefOfpJson: ofp.rawJson,
-        source
+        source,
+        economy
       })
       .then((flight) => onCreated(flight))
   }
@@ -156,7 +161,7 @@ export function OfpImportPreview({ ofp, companies, source, onCreated }: OfpImpor
               <div>
                 <div className="flight-card-callsign">{resolution.data.company.displayName}</div>
                 <div className="flight-card-number">
-                  Vol {resolution.data.company.iataCode}
+                  Vol {resolution.data.company.icaoCode}
                   {resolution.data.flightNumberDigits} · {resolution.data.aircraft.type}
                   {resolution.data.aircraft.registration ? ` (${resolution.data.aircraft.registration})` : ''}
                 </div>

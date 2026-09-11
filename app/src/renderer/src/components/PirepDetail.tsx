@@ -17,11 +17,12 @@ import {
   TrendingUpIcon
 } from '@renderer/components/icons'
 import { AIRPORT_NAMES } from '@shared/airports/airportNames'
-import { formatDateTime, formatHours, parseUtc } from '@renderer/lib/format'
+import { formatDateTime, formatEur, formatHours, parseUtc } from '@renderer/lib/format'
 import { DELAY_BUCKET_LABEL, DELAY_BUCKET_VARIANT } from '@renderer/lib/labels'
 import { formatDelayDuration } from '@shared/flightStatus/formatDelayDuration'
 import { usePirepApproachProfile, usePirepEvents, usePirepFlightPath, usePirepTelemetrySamples } from '@renderer/hooks/usePireps'
 import { useGsxReceipts } from '@renderer/hooks/useGsxReceipts'
+import { useFlightEconomy } from '@renderer/hooks/useEconomy'
 import { useOfpDetail } from '@renderer/hooks/useOfpDetail'
 import { PirepReplay } from './PirepReplay'
 import { analyzePirepTelemetry, scoreComfort, scoreFuel, scoreLanding, scorePunctuality } from '@shared/flightStatus/analyzePirepTelemetry'
@@ -55,6 +56,7 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
   const { data: telemetrySamples } = usePirepTelemetrySamples(pirep.id)
   const { data: ofp } = useOfpDetail(flight.id, flight.source === 'simbrief')
   const { data: gsxReceipts, isLoading: gsxReceiptsLoading } = useGsxReceipts(flight.id, pirep.engineStopTime, true)
+  const { data: flightEconomy } = useFlightEconomy(flight.id)
 
   const approachChartData = (approachProfile ?? []).map((point) => ({
     time: formatInTimeZone(parseUtc(point.timeIso), 'UTC', 'HH:mm:ss'),
@@ -323,6 +325,21 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
           ]}
         />
       </section>
+
+      {flightEconomy ? (
+        <section className="pirep-detail-section">
+          <h3>Économie</h3>
+          <StatGrid
+            compact
+            items={[
+              { key: 'ticket', label: 'Prix billet', value: formatEur(flightEconomy.ticketPriceEur), detail: `Référence ${formatEur(flightEconomy.referenceTicketPriceEur)}` },
+              { key: 'pax', label: 'Passagers vendus', value: flightEconomy.passengersSold ?? '—' },
+              { key: 'cargo', label: 'Fret vendu', value: flightEconomy.cargoKgSold !== null ? `${Math.round(flightEconomy.cargoKgSold).toLocaleString('fr-FR')} kg` : '—' },
+              { key: 'revenue', label: 'Revenu', value: flightEconomy.revenueEur !== null ? formatEur(flightEconomy.revenueEur) : '—' }
+            ]}
+          />
+        </section>
+      ) : null}
 
       <GsxReceiptsPanel receipts={gsxReceipts ?? []} isLoading={gsxReceiptsLoading} sectionClassName="pirep-detail-section" />
 
