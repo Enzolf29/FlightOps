@@ -464,7 +464,7 @@ function BookRealRouteModal({ route, company, onClose, onGenerated }: {
             </select>
             {defaultAircraft && getFleetRouteMatch(defaultAircraft, route) === 'positioned' ? <span className="form-hint form-hint-success">Avion compatible sélectionné automatiquement : il est déjà à {route.departureIcao}.</span> : null}
           </div>
-          <label className="form-field"><span>Numéro de vol</span><div className="form-inline-group"><span className="real-flights-iata-prefix">{company.iataCode}</span>
+          <label className="form-field"><span>Numéro de vol</span><div className="form-inline-group"><span className="real-flights-icao-prefix">{company.icaoCode}</span>
             <input value={flightNumberDigits} onChange={(event) => setFlightNumberDigits(event.target.value.toUpperCase())} placeholder="1445" /></div>
             {suggestFlightNumber.isPending ? <span className="form-hint">Recherche d'un numéro de vol observé sur cette route…</span>
               : suggestionTried && !flightNumberDigits ? <span className="form-hint">Aucun numéro observé sur cette route, saisissez-en un.</span> : null}</label>

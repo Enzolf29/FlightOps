@@ -21,7 +21,7 @@ export function registerBookingHandlers(): void {
     const id = createFlight({
       companyId: input.companyId,
       aircraftId: input.aircraftId,
-      flightNumber: company.iataCode + input.flightNumberDigits,
+      flightNumber: company.icaoCode + input.flightNumberDigits,
       callsign,
       callsignDisplay: callsign,
       departureIcao: input.departureIcao,

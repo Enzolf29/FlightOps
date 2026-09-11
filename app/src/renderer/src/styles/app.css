@@ -1255,7 +1255,7 @@ button.danger,
   .real-flights-route-detail-sections { grid-template-columns: 1fr; }
 }
 
-.real-flights-iata-prefix {
+.real-flights-icao-prefix {
   display: inline-flex;
   align-items: center;
   padding: 0 11px;
