@@ -24,8 +24,9 @@ import { usePirepApproachProfile, usePirepEvents, usePirepFlightPath, usePirepTe
 import { useGsxReceipts } from '@renderer/hooks/useGsxReceipts'
 import { useFlightEconomy } from '@renderer/hooks/useEconomy'
 import { useOfpDetail } from '@renderer/hooks/useOfpDetail'
+import { parseGsxEurAmount } from '@shared/gsx/parseGsxEurAmount'
 import { PirepReplay } from './PirepReplay'
-import { analyzePirepTelemetry, scoreComfort, scoreFuel, scoreLanding, scorePunctuality } from '@shared/flightStatus/analyzePirepTelemetry'
+import { analyzePirepTelemetry } from '@shared/flightStatus/analyzePirepTelemetry'
 
 interface PirepDetailProps {
   pirep: PirepWithFlight
@@ -74,7 +75,11 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
     : null
   const plannedFuelUsed = plannedFuelUsedRaw === null ? null : ofp?.loadsheet?.units === 'lbs' ? plannedFuelUsedRaw / 2.2046226218 : plannedFuelUsedRaw
   const scheduledMinutes = Math.max(0, (parseUtc(flight.scheduledArrival).getTime() - parseUtc(flight.scheduledDeparture).getTime()) / 60000)
-  const warningEvents = (events ?? []).filter((event) => event.severity === 'warning')
+  const gsxTotalCostEur = gsxReceipts && gsxReceipts.length > 0
+    ? gsxReceipts.reduce((sum, receipt) => sum + (parseGsxEurAmount(receipt.total) ?? 0), 0)
+    : null
+  const profitEur = flightEconomy?.revenueEur != null ? flightEconomy.revenueEur - (gsxTotalCostEur ?? 0) : null
+  const hasFinanceData = Boolean(flightEconomy) || Boolean(gsxReceipts && gsxReceipts.length > 0)
   const telemetryChartData = (telemetrySamples ?? []).map((sample) => ({
     time: formatInTimeZone(parseUtc(sample.timeIso), 'UTC', 'HH:mm'),
     altitude: Math.round(sample.altitudeFeet),
@@ -218,22 +223,6 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
       </section>
 
       <section className="pirep-detail-section">
-        <h3>Indicateurs du vol</h3>
-        <StatGrid items={[
-          { key: 'punctuality-score', label: 'Ponctualité', value: formatScore(scorePunctuality(pirep.delayMinutes)) },
-          { key: 'fuel-score', label: 'Gestion carburant', value: formatScore(scoreFuel(actualFuelUsed, plannedFuelUsed)) },
-          { key: 'comfort-score', label: 'Confort', value: formatScore(scoreComfort(pirep.touchdownGForce, warningEvents.length)) },
-          { key: 'landing-score', label: 'Atterrissage', value: formatScore(scoreLanding(pirep.touchdownVerticalSpeedFpm)) }
-        ]} />
-        <div className="pirep-anomalies">
-          <strong>Anomalies détectées</strong>
-          {warningEvents.length === 0 ? <span>Aucune anomalie enregistrée.</span> : (
-            <ul>{warningEvents.map((event, index) => <li key={`${event.simTimeIso}-${index}`}>{event.message}</li>)}</ul>
-          )}
-        </div>
-      </section>
-
-      <section className="pirep-detail-section">
         <h3>Statistiques d’atterrissage</h3>
         <StatGrid
           items={[
@@ -326,22 +315,29 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
         />
       </section>
 
-      {flightEconomy ? (
+      {hasFinanceData ? (
         <section className="pirep-detail-section">
-          <h3>Économie</h3>
+          <h3>Finance</h3>
           <StatGrid
-            compact
             items={[
-              { key: 'ticket', label: 'Prix billet', value: formatEur(flightEconomy.ticketPriceEur), detail: `Référence ${formatEur(flightEconomy.referenceTicketPriceEur)}` },
-              { key: 'pax', label: 'Passagers vendus', value: flightEconomy.passengersSold ?? '—' },
-              { key: 'baggage', label: 'Bagages en soute', value: flightEconomy.checkedBagsSold !== null ? `${flightEconomy.checkedBagsSold} (${formatEur(flightEconomy.baggagePriceEur)}/bagage)` : '—' },
-              { key: 'revenue', label: 'Revenu', value: flightEconomy.revenueEur !== null ? formatEur(flightEconomy.revenueEur) : '—' }
+              { key: 'revenue', label: 'Revenu', value: flightEconomy?.revenueEur != null ? formatEur(flightEconomy.revenueEur) : '—' },
+              { key: 'cost', label: 'Coût GSX', value: gsxTotalCostEur !== null ? formatEur(gsxTotalCostEur) : '—' },
+              { key: 'profit', label: 'Bénéfice', value: profitEur !== null ? formatEur(profitEur) : '—' }
             ]}
           />
+          {flightEconomy ? (
+            <StatGrid
+              compact
+              items={[
+                { key: 'ticket', label: 'Prix billet', value: formatEur(flightEconomy.ticketPriceEur), detail: `Référence ${formatEur(flightEconomy.referenceTicketPriceEur)}` },
+                { key: 'pax', label: 'Passagers vendus', value: flightEconomy.passengersSold ?? '—' },
+                { key: 'baggage', label: 'Bagages en soute', value: flightEconomy.checkedBagsSold !== null ? `${flightEconomy.checkedBagsSold} (${formatEur(flightEconomy.baggagePriceEur)}/bagage)` : '—' }
+              ]}
+            />
+          ) : null}
+          <GsxReceiptsPanel receipts={gsxReceipts ?? []} isLoading={gsxReceiptsLoading} bare />
         </section>
       ) : null}
-
-      <GsxReceiptsPanel receipts={gsxReceipts ?? []} isLoading={gsxReceiptsLoading} sectionClassName="pirep-detail-section" />
 
       <section className="pirep-detail-section">
         <h3>Journal d’évènements</h3>
@@ -367,10 +363,6 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
       ) : null}
     </div>
   )
-}
-
-function formatScore(score: number | null): string {
-  return score === null ? '—' : `${score}/100`
 }
 
 function Comparison({ label, planned, actual }: { label: string; planned: string; actual: string }) {

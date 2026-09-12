@@ -2,9 +2,11 @@ import { getDb } from '../index'
 import type {
   AircraftTypeFlightCount,
   CompanyFlightCount,
+  CompanyProfitBreakdown,
   LandingRateCategoryCount,
   LandingRateStats,
   MonthlyHoursPoint,
+  ProfitStats,
   PunctualityBreakdown,
   PunctualityExtremeFlight,
   PunctualityExtremes,
@@ -20,6 +22,8 @@ import {
 import type { GsxCostStats } from '@shared/types/gsxReceipt'
 import { getGsxCostStatsForFlights } from '../../gsx/gsxReceiptsRepository'
 import { getAllPireps, getCumulativeStats, getPirepsByAircraft } from './pirepRepository'
+import { getAllCompanies } from './companyRepository'
+import { getCompanyEconomySummary } from './economyRepository'
 
 const TOP_ROUTES_LIMIT = 10
 const LANDING_RATE_CATEGORY_ORDER: LandingRateCategory[] = ['very_smooth', 'smooth', 'normal', 'firm', 'hard', 'very_hard']
@@ -168,12 +172,11 @@ function getLandingRateStats(): LandingRateStats {
 
   const history = getDb()
     .prepare(
-      `SELECT actual_arrival_time AS arrival_time, touchdown_vertical_speed_fpm AS vs
+      `SELECT touchdown_vertical_speed_fpm AS vs
        FROM pireps
-       WHERE touchdown_vertical_speed_fpm IS NOT NULL
-       ORDER BY actual_arrival_time ASC`
+       WHERE touchdown_vertical_speed_fpm IS NOT NULL`
     )
-    .all() as Array<{ arrival_time: string; vs: number }>
+    .all() as Array<{ vs: number }>
 
   const categoryTally: Record<LandingRateCategory, number> = {
     very_smooth: 0,
@@ -192,13 +195,27 @@ function getLandingRateStats(): LandingRateStats {
     count: categoryTally[category]
   }))
 
+  // Moyenne mensuelle plutôt que le détail vol par vol : au-delà de quelques dizaines de vols, une
+  // courbe par vol devient illisible (voir getMonthlyHours pour le même principe de regroupement).
+  const monthlyRows = getDb()
+    .prepare(
+      `SELECT substr(actual_arrival_time, 1, 7) AS month,
+              AVG(touchdown_vertical_speed_fpm) AS avg_fpm,
+              COUNT(*) AS count
+       FROM pireps
+       WHERE touchdown_vertical_speed_fpm IS NOT NULL
+       GROUP BY month
+       ORDER BY month ASC`
+    )
+    .all() as Array<{ month: string; avg_fpm: number; count: number }>
+
   return {
     averageFpm: summary.avg_fpm,
     smoothestFpm: summary.smoothest_fpm,
     hardestFpm: summary.hardest_fpm,
     hardLandingCount: hardLandingRow.count,
     recordedCount: summary.recorded_count,
-    history: history.map((row) => ({ arrivalTime: row.arrival_time, verticalSpeedFpm: row.vs })),
+    monthlyAverages: monthlyRows.map((row) => ({ month: row.month, averageFpm: row.avg_fpm, count: row.count })),
     categoryBreakdown
   }
 }
@@ -221,6 +238,40 @@ export function getGsxCostStatsForAircraft(aircraftId: number): GsxCostStats {
   return gsxCostStatsForPireps(getPirepsByAircraft(aircraftId))
 }
 
+/** Revenu, coût GSX et bénéfice agrégés sur toutes les compagnies — réutilise
+ * getCompanyEconomySummary (même calcul que la page Économie) plutôt que de le recalculer ici. */
+function getProfitStats(): ProfitStats {
+  const byCompany: CompanyProfitBreakdown[] = []
+  let totalRevenueEur = 0
+  let totalCostEur = 0
+  let flightsWithRevenue = 0
+
+  for (const company of getAllCompanies()) {
+    const summary = getCompanyEconomySummary(company.id)
+    if (summary.flightsWithData === 0) continue
+    totalRevenueEur += summary.totalRevenueEur
+    totalCostEur += summary.totalCostEur
+    flightsWithRevenue += summary.flightsWithData
+    byCompany.push({
+      companyIcao: company.icaoCode,
+      companyName: company.displayName,
+      revenueEur: summary.totalRevenueEur,
+      costEur: summary.totalCostEur,
+      profitEur: summary.profitEur
+    })
+  }
+
+  byCompany.sort((a, b) => b.profitEur - a.profitEur)
+
+  return {
+    totalRevenueEur,
+    totalCostEur,
+    totalProfitEur: totalRevenueEur - totalCostEur,
+    flightsWithRevenue,
+    byCompany
+  }
+}
+
 export function getStatisticsOverview(): StatisticsOverview {
   const { cumulativeHours, totalFlights } = getCumulativeStats()
 
@@ -234,6 +285,7 @@ export function getStatisticsOverview(): StatisticsOverview {
     punctuality: getPunctualityBreakdown(),
     punctualityExtremes: getPunctualityExtremes(),
     landingRate: getLandingRateStats(),
-    gsxCosts: gsxCostStatsForPireps(getAllPireps())
+    gsxCosts: gsxCostStatsForPireps(getAllPireps()),
+    profit: getProfitStats()
   }
 }

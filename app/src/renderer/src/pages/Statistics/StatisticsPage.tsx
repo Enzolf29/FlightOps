@@ -18,10 +18,15 @@ import { fr } from 'date-fns/locale'
 import { formatInTimeZone } from 'date-fns-tz'
 import { useStatistics } from '@renderer/hooks/useStatistics'
 import { StatGrid } from '@renderer/components/StatGrid'
-import { ArrowUpDownIcon } from '@renderer/components/icons'
-import { formatEur, formatHours, parseUtc } from '@renderer/lib/format'
+import { ArrowUpDownIcon, InfoIcon } from '@renderer/components/icons'
+import { formatEur, formatHours } from '@renderer/lib/format'
 import { HARD_LANDING_VS_FPM } from '@shared/flightStatus/evaluateFlightEvents'
 import { formatDelayDuration } from '@shared/flightStatus/formatDelayDuration'
+import {
+  LANDING_RATE_CATEGORY_FLOOR_FPM,
+  LANDING_RATE_CATEGORY_LABEL,
+  type LandingRateCategory
+} from '@shared/flightStatus/categorizeLandingRate'
 
 const GSX_CATEGORY_COLORS: Record<string, string> = {
   Fuel: 'var(--accent)',
@@ -77,10 +82,9 @@ export function StatisticsPage() {
     { key: 'cancelled', label: 'Annulé', value: data.punctuality.cancelled }
   ].filter((entry) => entry.value > 0)
 
-  const landingRateData = data.landingRate.history.map((point, index) => ({
-    label: formatInTimeZone(parseUtc(point.arrivalTime), 'UTC', 'dd/MM', { locale: fr }),
-    index: index + 1,
-    fpm: Math.round(point.verticalSpeedFpm)
+  const landingRateMonthlyData = data.landingRate.monthlyAverages.map((point) => ({
+    month: formatInTimeZone(new Date(`${point.month}-01T00:00:00Z`), 'UTC', 'MMM yyyy', { locale: fr }),
+    fpm: Math.round(point.averageFpm)
   }))
 
   const landingCategoryData = data.landingRate.categoryBreakdown
@@ -91,6 +95,11 @@ export function StatisticsPage() {
     key: entry.category,
     label: entry.label,
     value: Math.round(entry.totalEur * 100) / 100
+  }))
+
+  const profitByCompanyData = data.profit.byCompany.map((entry) => ({
+    companyIcao: entry.companyIcao,
+    profit: Math.round(entry.profitEur * 100) / 100
   }))
 
   return (
@@ -225,7 +234,10 @@ export function StatisticsPage() {
           </section>
 
           <section className="home-section">
-            <h2>Taux d’atterrissage</h2>
+            <h2 className="home-section-title-with-info">
+              Taux d’atterrissage
+              <LandingRateScaleInfo />
+            </h2>
             {data.landingRate.recordedCount > 0 ? (
               <>
                 <div className="stats-with-chart">
@@ -277,16 +289,16 @@ export function StatisticsPage() {
                   ) : null}
                 </div>
 
-                {landingRateData.length > 1 ? (
+                {landingRateMonthlyData.length > 1 ? (
                   <div className="pirep-chart-wrapper">
                     <ResponsiveContainer width="100%" height={260}>
-                      <LineChart data={landingRateData} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+                      <LineChart data={landingRateMonthlyData} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-                        <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="var(--text-muted)" />
+                        <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="var(--text-muted)" />
                         <YAxis tick={{ fontSize: 11 }} stroke="var(--text-muted)" width={50} />
                         <ReferenceLine y={HARD_LANDING_VS_FPM} stroke="var(--status-delayed-high)" strokeDasharray="4 4" />
                         <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }} />
-                        <Line type="monotone" dataKey="fpm" name="Vitesse verticale (ft/min)" stroke="var(--accent)" dot />
+                        <Line type="monotone" dataKey="fpm" name="Vitesse verticale moyenne (ft/min)" stroke="var(--accent)" dot />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -336,8 +348,72 @@ export function StatisticsPage() {
               <p className="empty-hint">Aucune facture GSX rattachée à vos vols pour l’instant (nécessite GSX Pro 4+).</p>
             )}
           </section>
+
+          <section className="home-section">
+            <h2>Bénéfice (mode économie)</h2>
+            {data.profit.flightsWithRevenue > 0 ? (
+              <div className="stats-with-chart">
+                <StatGrid
+                  compact
+                  items={[
+                    { key: 'revenue', label: 'Revenu total', value: formatEur(data.profit.totalRevenueEur) },
+                    { key: 'cost', label: 'Coût GSX total', value: formatEur(data.profit.totalCostEur) },
+                    { key: 'profit', label: 'Bénéfice total', value: formatEur(data.profit.totalProfitEur) },
+                    { key: 'flights', label: 'Vols avec revenu', value: data.profit.flightsWithRevenue }
+                  ]}
+                />
+                {profitByCompanyData.length > 0 ? (
+                  <div className="pirep-chart-wrapper">
+                    <ResponsiveContainer width="100%" height={Math.max(180, profitByCompanyData.length * 36)}>
+                      <BarChart data={profitByCompanyData} layout="vertical" margin={{ top: 8, right: 20, bottom: 0, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                        <XAxis type="number" tick={{ fontSize: 11 }} stroke="var(--text-muted)" />
+                        <YAxis dataKey="companyIcao" type="category" tick={{ fontSize: 12 }} stroke="var(--text-muted)" width={60} />
+                        <Tooltip
+                          formatter={(value) => formatEur(Number(value))}
+                          contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}
+                        />
+                        <Bar dataKey="profit" name="Bénéfice" fill="var(--status-on-time)" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="empty-hint">Aucun vol avec des revenus mode économie pour l’instant.</p>
+            )}
+          </section>
         </>
       )}
     </div>
+  )
+}
+
+function LandingRateScaleInfo() {
+  const floors = LANDING_RATE_CATEGORY_FLOOR_FPM
+  const rows: Array<{ key: LandingRateCategory; range: string }> = [
+    { key: 'very_smooth', range: `0 à ${floors.very_smooth} ft/min` },
+    { key: 'smooth', range: `${floors.very_smooth - 1} à ${floors.smooth} ft/min` },
+    { key: 'normal', range: `${floors.smooth - 1} à ${floors.normal} ft/min` },
+    { key: 'firm', range: `${floors.normal - 1} à ${floors.firm} ft/min` },
+    { key: 'hard', range: `${floors.firm - 1} à ${floors.hard} ft/min` },
+    { key: 'very_hard', range: `en dessous de ${floors.hard} ft/min` }
+  ]
+
+  return (
+    <span className="info-tooltip" tabIndex={0}>
+      <InfoIcon size={15} />
+      <span className="info-tooltip-content" role="tooltip">
+        <strong>Barème des atterrissages</strong>
+        <ul>
+          {rows.map((row) => (
+            <li key={row.key}>
+              <span className="info-tooltip-swatch" style={{ background: LANDING_CATEGORY_COLORS[row.key] }} />
+              {LANDING_RATE_CATEGORY_LABEL[row.key]} <small>{row.range}</small>
+            </li>
+          ))}
+        </ul>
+      </span>
+    </span>
   )
 }

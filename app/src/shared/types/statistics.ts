@@ -29,9 +29,10 @@ export interface PunctualityBreakdown {
   cancelled: number
 }
 
-export interface LandingRatePoint {
-  arrivalTime: string
-  verticalSpeedFpm: number
+export interface MonthlyLandingRatePoint {
+  month: string
+  averageFpm: number
+  count: number
 }
 
 export interface LandingRateCategoryCount {
@@ -46,7 +47,7 @@ export interface LandingRateStats {
   hardestFpm: number | null
   hardLandingCount: number
   recordedCount: number
-  history: LandingRatePoint[]
+  monthlyAverages: MonthlyLandingRatePoint[]
   categoryBreakdown: LandingRateCategoryCount[]
 }
 
@@ -65,6 +66,23 @@ export interface PunctualityExtremes {
   mostEarly: PunctualityExtremeFlight | null
 }
 
+export interface CompanyProfitBreakdown {
+  companyIcao: string
+  companyName: string
+  revenueEur: number
+  costEur: number
+  profitEur: number
+}
+
+export interface ProfitStats {
+  totalRevenueEur: number
+  totalCostEur: number
+  totalProfitEur: number
+  /** Nombre de vols avec un revenu connu (mode économie), tous compagnies confondues. */
+  flightsWithRevenue: number
+  byCompany: CompanyProfitBreakdown[]
+}
+
 export interface StatisticsOverview {
   totalFlights: number
   cumulativeHours: number
@@ -76,4 +94,5 @@ export interface StatisticsOverview {
   punctualityExtremes: PunctualityExtremes
   landingRate: LandingRateStats
   gsxCosts: GsxCostStats
+  profit: ProfitStats
 }

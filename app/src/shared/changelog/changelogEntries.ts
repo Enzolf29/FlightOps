@@ -12,6 +12,18 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
   {
+    version: '1.0.28',
+    changes: [
+      'Correction du mode économie : le prix résolu à la réservation survit désormais à un redémarrage de l’application avant l’import du plan SimBrief',
+      'Avertissement à l’import si une ligne tarifiée n’a aucune résolution économie en attente',
+      'Nouvelle section "Finance" dans le PIREP : revenu, coût GSX, bénéfice et factures regroupés au même endroit',
+      'Nouvelle section "Bénéfice" dans les statistiques, avec le détail par compagnie',
+      'Badge "Économie" (vert/rouge) sur la page Suivi de vol, à côté des boutons d’annonces cabine',
+      'Suppression des indicateurs de vol et anomalies détectées du PIREP',
+      'La courbe de taux d’atterrissage affiche désormais la moyenne mensuelle plutôt qu’un point par vol, avec une info-bulle rappelant le barème des catégories'
+    ]
+  },
+  {
     version: '1.0.27',
     changes: [
       "La clôture d'un vol attend désormais la fin réelle du débarquement GSX (en plus de l'annonce cabine), quand GSX a été utilisé pendant ce vol",

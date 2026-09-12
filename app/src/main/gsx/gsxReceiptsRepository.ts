@@ -4,6 +4,7 @@ import type { FlightWithRelations } from '@shared/types/flight'
 import type { GsxCostCategoryTotal, GsxCostStats, GsxReceipt } from '@shared/types/gsxReceipt'
 import { GSX_CATEGORY_LABEL } from '@shared/types/gsxReceipt'
 import { parseUtc } from '@shared/lib/datetime'
+import { parseGsxEurAmount } from '@shared/gsx/parseGsxEurAmount'
 
 const RECEIPT_FILENAME_PATTERN = /^(\d{8}T\d{6}Z)_([A-Z0-9]{3,4})_.+\.json$/
 
@@ -212,15 +213,7 @@ export function getGsxReceiptsForFlight(
   return matchGsxReceiptsForFlight(listAllGsxReceipts(rootDir), flight, referenceEndIso ?? new Date().toISOString())
 }
 
-/** Extrait le montant en euros d'une chaîne de facture GSX ("€4,637.14 ~$ 5,396.42" -> 4637.14).
- * Le séparateur de milliers "," est toujours utilisé dans ces chaînes, quelle que soit la locale
- * système — retiré avant conversion. Retourne null si aucun montant en euros n'est trouvé. */
-export function parseGsxEurAmount(text: string): number | null {
-  const match = /€\s?([\d,]+\.\d{2})/.exec(text)
-  if (!match) return null
-  const value = Number.parseFloat(match[1].replace(/,/g, ''))
-  return Number.isFinite(value) ? value : null
-}
+export { parseGsxEurAmount } from '@shared/gsx/parseGsxEurAmount'
 
 export interface GsxCostFlightInput extends MatchableFlight {
   /** Heure de coupure moteurs (PIREP) si le vol est terminé, sinon null. */

@@ -12,6 +12,7 @@ import { useFlights } from '@renderer/hooks/useFlights'
 import { useOfpDetail } from '@renderer/hooks/useOfpDetail'
 import { useFlightEvents } from '@renderer/hooks/useFlightEvents'
 import { useGsxReceipts } from '@renderer/hooks/useGsxReceipts'
+import { useFlightEconomy } from '@renderer/hooks/useEconomy'
 import { Badge } from '@renderer/components/Badge'
 import { LiveFlightHero } from '@renderer/components/LiveFlightHero'
 import { StatGrid } from '@renderer/components/StatGrid'
@@ -42,6 +43,7 @@ export function LiveTrackingPage() {
   const { data: armedFlightId } = useArmedFlightId()
   const { data: flights } = useFlights()
   const armedFlight = (flights ?? []).find((flight) => flight.id === armedFlightId) ?? null
+  const { data: armedFlightEconomy } = useFlightEconomy(armedFlight?.id ?? null)
   const disarmFlight = useDisarmFlight()
   const completeManually = useCompleteManually()
   const automaticAnnouncementsEnabled = useCabinAnnouncementStore((state) => state.automaticAnnouncementsEnabled)
@@ -53,6 +55,12 @@ export function LiveTrackingPage() {
         <h1>Suivi de vol en direct</h1>
         {armedFlight ? (
           <div className="form-actions">
+            {armedFlightEconomy !== undefined ? (
+              <Badge
+                label="Économie"
+                variant={armedFlightEconomy ? 'badge-on-time' : 'badge-delayed-high'}
+              />
+            ) : null}
             <button
               type="button"
               aria-pressed={automaticAnnouncementsEnabled}
