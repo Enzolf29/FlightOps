@@ -31,6 +31,9 @@ export interface SimTelemetry {
   logoLightsOn: boolean
   /** État GSX : 5 = service en cours, 6 = terminé. 0 si GSX n'est pas présent. */
   gsxBoardingState?: number
+  /** Même convention d'états que gsxBoardingState, côté débarquement — sert à faire attendre la
+   * clôture du vol jusqu'à la fin réelle du service (voir flightStatusDetector). */
+  gsxDeboardingState?: number
   gsxDepartureState?: number
   /** Nombre cible configuré dans GSX et cumul réellement embarqué sur tous les bus. */
   gsxPassengersTarget?: number

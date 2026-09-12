@@ -72,6 +72,7 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
   // États documentés par GSX : 5 = service en cours, 6 = terminé. Les L:vars absentes valent 0,
   // l'app continue donc de fonctionner normalement lorsque GSX n'est pas installé ou pas lancé.
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_BOARDING_STATE', 'number', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_DEBOARDING_STATE', 'number', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_DEPARTURE_STATE', 'number', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_NUMPASSENGERS', 'number', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_NUMPASSENGERS_BOARDING_TOTAL', 'number', SimConnectDataType.FLOAT64)
@@ -148,6 +149,7 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
     const wingLightsOn = data.readFloat64() >= 0.5
     const logoLightsOn = data.readFloat64() >= 0.5
     const gsxBoardingState = Math.round(data.readFloat64())
+    const gsxDeboardingState = Math.round(data.readFloat64())
     const gsxDepartureState = Math.round(data.readFloat64())
     const gsxPassengersTarget = Math.round(data.readFloat64())
     const gsxPassengersBoardedTotal = Math.round(data.readFloat64())
@@ -212,6 +214,7 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
       wingLightsOn,
       logoLightsOn,
       gsxBoardingState,
+      gsxDeboardingState,
       gsxDepartureState,
       gsxPassengersTarget,
       gsxPassengersBoardedTotal,

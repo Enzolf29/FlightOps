@@ -50,14 +50,36 @@ let sampleCount = 0
 let recoveredSession = false
 let recorderError: string | null = null
 let awaitingEngineShutdown = false
-const PENDING_ARRIVAL_SAFETY_TIMEOUT_MS = 5 * 60 * 1000
+/** GSX documente le débarquement avec la même convention d'états que l'embarquement (voir
+ * gsxBoardingState) : 5 = service en cours, 6 = terminé. */
+const GSX_DEBOARDING_COMPLETE_STATE = 6
+// Le débarquement GSX (portes, passerelle/escalier, sortie des passagers) peut prendre plus de
+// temps qu'une simple annonce cabine — filet de sécurité plus généreux que l'ancien délai
+// (5 min) pour ne pas clôturer le vol en pleine opération sol si la confirmation venait à manquer.
+const PENDING_ARRIVAL_SAFETY_TIMEOUT_MS = 10 * 60 * 1000
 /**
- * Moteurs coupés, avion au parking : le vol reste armé le temps que l'annonce de débarquement (si
- * elle doit être jouée) se termine réellement, plutôt que d'être tronquée par le désarmement
- * immédiat du vol — voir beginPendingArrivalCompletion/confirmArrivalComplete.
+ * Moteurs coupés, avion au parking : le vol reste armé tant que l'annonce de débarquement (si elle
+ * doit être jouée) n'est pas terminée ET, le cas échéant, tant que le débarquement GSX n'est pas
+ * réellement achevé — plutôt que d'être tronqué par le désarmement immédiat du vol. L'heure
+ * d'arrivée officielle (actualArrivalIso, capturée à la coupure moteurs) n'est pas affectée par
+ * cette attente — voir beginPendingArrivalCompletion/confirmArrivalComplete/tryCompletePendingArrival.
  */
-let pendingArrivalConfirmation: { actualArrivalIso: string } | null = null
+interface PendingArrivalConfirmation {
+  actualArrivalIso: string
+  announcementConfirmed: boolean
+  /** GSX a été détecté à un moment ou un autre de ce vol (embarquement, repoussage...) — le
+   * débarquement est alors jugé "applicable" et sa fin réellement attendue. Décidé une fois pour
+   * toutes à la coupure moteurs plutôt que reguetté pendant l'attente : sinon, un joueur qui
+   * n'appelle le débarquement GSX qu'après la fin de l'annonce cabine (déjà confirmée) verrait son
+   * vol se clôturer avant même que le service ne démarre. */
+  gsxApplicable: boolean
+  gsxDeboardingComplete: boolean
+}
+let pendingArrivalConfirmation: PendingArrivalConfirmation | null = null
 let pendingArrivalTimeoutHandle: ReturnType<typeof setTimeout> | null = null
+/** Vrai dès que GSX a été observé actif (embarquement, repoussage) à un moment de ce vol — voir
+ * PendingArrivalConfirmation.gsxApplicable. Réinitialisé à chaque armement de vol. */
+let gsxObservedThisFlight = false
 const recorderListeners = new Set<(status: FlightRecorderStatus) => void>()
 
 let previousTelemetry: SimTelemetry | null = null
@@ -121,6 +143,7 @@ interface PersistedDetectorState {
   landingPrecisionArmed: boolean
   touchdownStats: TouchdownStats | null
   awaitingEngineShutdown: boolean
+  gsxObservedThisFlight: boolean
 }
 
 function recorderStatus(): FlightRecorderStatus {
@@ -174,7 +197,8 @@ function persistedState(): PersistedDetectorState | null {
     approachProfile,
     landingPrecisionArmed,
     touchdownStats,
-    awaitingEngineShutdown
+    awaitingEngineShutdown,
+    gsxObservedThisFlight
   }
 }
 
@@ -224,6 +248,7 @@ export function recoverFlightSession(): void {
     landingPrecisionArmed = state.landingPrecisionArmed
     touchdownStats = state.touchdownStats
     awaitingEngineShutdown = state.awaitingEngineShutdown ?? false
+    gsxObservedThisFlight = state.gsxObservedThisFlight ?? false
     sessionStartedAt = stored.startedAt
     sampleCount = countTelemetrySamples(stored.flightId)
     recoveredSession = true
@@ -284,6 +309,7 @@ export function armFlight(flightId: number): void {
   landingPrecisionArmed = isResuming
   touchdownStats = null
   awaitingEngineShutdown = false
+  gsxObservedThisFlight = false
   cancelPendingArrivalCompletion()
   sessionStartedAt = new Date().toISOString()
   lastPersistedAtMs = 0
@@ -309,14 +335,24 @@ export function disarmFlight(): void {
 /**
  * Moteurs coupés, avion au parking : n'achève pas le vol tout de suite — laisse le temps à
  * l'annonce de débarquement de se jouer en entier (voir confirmArrivalComplete, déclenché côté
- * renderer). Filet de sécurité : clôture quand même le vol après PENDING_ARRIVAL_SAFETY_TIMEOUT_MS
- * si cette confirmation n'arrive jamais (annonces désactivées côté renderer fermé, etc.).
+ * renderer) et, le cas échéant, au débarquement GSX de réellement se terminer (voir
+ * tryCompletePendingArrival). Filet de sécurité : clôture quand même le vol après
+ * PENDING_ARRIVAL_SAFETY_TIMEOUT_MS si ces conditions n'arrivent jamais à être réunies (annonces
+ * désactivées côté renderer fermé, service GSX jamais confirmé terminé, etc.).
  */
-function beginPendingArrivalCompletion(actualArrivalIso: string): void {
-  pendingArrivalConfirmation = { actualArrivalIso }
+function beginPendingArrivalCompletion(actualArrivalIso: string, telemetry: SimTelemetry): void {
+  pendingArrivalConfirmation = {
+    actualArrivalIso,
+    announcementConfirmed: false,
+    gsxApplicable: gsxObservedThisFlight,
+    gsxDeboardingComplete: (telemetry.gsxDeboardingState ?? 0) === GSX_DEBOARDING_COMPLETE_STATE
+  }
   pendingArrivalTimeoutHandle = setTimeout(() => {
     pendingArrivalTimeoutHandle = null
-    confirmArrivalComplete()
+    if (!pendingArrivalConfirmation) return
+    const { actualArrivalIso: arrivalIso } = pendingArrivalConfirmation
+    cancelPendingArrivalCompletion()
+    completeArmedFlight(arrivalIso)
   }, PENDING_ARRIVAL_SAFETY_TIMEOUT_MS)
 }
 
@@ -327,17 +363,32 @@ function cancelPendingArrivalCompletion(): void {
 }
 
 /**
- * Termine effectivement un vol en attente de clôture (voir beginPendingArrivalCompletion) : appelé
- * par le renderer une fois l'annonce de débarquement terminée, ou immédiatement si aucune n'est
- * prévue pour ce vol. Sans effet si aucune clôture n'est en attente (vol déjà désarmé manuellement,
- * appel tardif, etc.). L'heure d'arrivée officielle (coupure moteurs) n'est pas affectée : elle
- * reste celle capturée au moment de beginPendingArrivalCompletion, pas l'heure de cet appel.
+ * Clôture le vol en attente (voir beginPendingArrivalCompletion) dès que toutes les conditions
+ * applicables sont réunies : l'annonce de débarquement confirmée terminée côté renderer, et — si
+ * GSX a été utilisé à un moment de ce vol (gsxApplicable) — la fin réelle du débarquement GSX
+ * également. Sans effet tant qu'il en manque une, ou si aucune clôture n'est en attente.
+ */
+function tryCompletePendingArrival(): void {
+  if (!pendingArrivalConfirmation) return
+  const { announcementConfirmed, gsxApplicable, gsxDeboardingComplete, actualArrivalIso } = pendingArrivalConfirmation
+  if (!announcementConfirmed) return
+  if (gsxApplicable && !gsxDeboardingComplete) return
+  cancelPendingArrivalCompletion()
+  completeArmedFlight(actualArrivalIso)
+}
+
+/**
+ * Appelé par le renderer une fois l'annonce de débarquement terminée, ou immédiatement si aucune
+ * n'est prévue pour ce vol — ne clôture le vol que si le débarquement GSX (le cas échéant) est lui
+ * aussi terminé, voir tryCompletePendingArrival. Sans effet si aucune clôture n'est en attente (vol
+ * déjà désarmé manuellement, appel tardif, etc.). L'heure d'arrivée officielle (coupure moteurs)
+ * n'est pas affectée : elle reste celle capturée au moment de beginPendingArrivalCompletion, pas
+ * l'heure de cet appel.
  */
 export function confirmArrivalComplete(): void {
   if (!pendingArrivalConfirmation) return
-  const { actualArrivalIso } = pendingArrivalConfirmation
-  cancelPendingArrivalCompletion()
-  completeArmedFlight(actualArrivalIso)
+  pendingArrivalConfirmation.announcementConfirmed = true
+  tryCompletePendingArrival()
 }
 
 export function getArmedFlightId(): number | null {
@@ -435,6 +486,10 @@ export function handleTelemetryTick(telemetry: SimTelemetry): void {
 
   if (armedFlightId === null || tickState === null) return
 
+  if (!gsxObservedThisFlight && ((telemetry.gsxBoardingState ?? 0) > 0 || (telemetry.gsxDepartureState ?? 0) > 0 || (telemetry.gsxDeboardingState ?? 0) > 0)) {
+    gsxObservedThisFlight = true
+  }
+
   const isFirstTick = previousTelemetry === null
   if (isFirstTick) {
     pushEvent({
@@ -493,15 +548,20 @@ export function handleTelemetryTick(telemetry: SimTelemetry): void {
     }
   }
 
-  // Vol en attente de clôture (moteurs coupés, annonce de débarquement pas encore terminée, voir
-  // beginPendingArrivalCompletion) : si un moteur redémarre entre-temps, la coupure était
-  // provisoire (roulage vers un autre point de parking, etc.) — on annule l'attente et on reprend
-  // le suivi normal. Sinon, rien d'autre à faire tant que confirmArrivalComplete n'arrive pas.
+  // Vol en attente de clôture (moteurs coupés, annonce de débarquement et/ou débarquement GSX pas
+  // encore terminés, voir beginPendingArrivalCompletion) : si un moteur redémarre entre-temps, la
+  // coupure était provisoire (roulage vers un autre point de parking, etc.) — on annule l'attente
+  // et on reprend le suivi normal. Sinon, on continue de guetter la fin du débarquement GSX ici à
+  // chaque tick (l'annonce, elle, est confirmée côté renderer — voir confirmArrivalComplete).
   if (pendingArrivalConfirmation !== null) {
     if (telemetry.enginesRunning) {
       cancelPendingArrivalCompletion()
     } else {
-      persistFlightSession(telemetry)
+      if ((telemetry.gsxDeboardingState ?? 0) === GSX_DEBOARDING_COMPLETE_STATE) {
+        pendingArrivalConfirmation.gsxDeboardingComplete = true
+      }
+      tryCompletePendingArrival()
+      if (armedFlightId !== null) persistFlightSession(telemetry)
       return
     }
   }
@@ -542,7 +602,7 @@ export function handleTelemetryTick(telemetry: SimTelemetry): void {
   if (awaitingEngineShutdown && !telemetry.enginesRunning) {
     const taxiInEvent = createTaxiInEvent(lastLandingSimTimeIso, telemetry.simZuluIso)
     if (taxiInEvent) pushEvent(taxiInEvent)
-    beginPendingArrivalCompletion(telemetry.simZuluIso)
+    beginPendingArrivalCompletion(telemetry.simZuluIso, telemetry)
     return
   }
 
@@ -569,7 +629,7 @@ export function handleTelemetryTick(telemetry: SimTelemetry): void {
     if (!telemetry.enginesRunning) {
       const taxiInEvent = createTaxiInEvent(lastLandingSimTimeIso, telemetry.simZuluIso)
       if (taxiInEvent) pushEvent(taxiInEvent)
-      beginPendingArrivalCompletion(telemetry.simZuluIso)
+      beginPendingArrivalCompletion(telemetry.simZuluIso, telemetry)
       return
     }
   }

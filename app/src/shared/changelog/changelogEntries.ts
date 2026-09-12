@@ -12,6 +12,13 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
   {
+    version: '1.0.27',
+    changes: [
+      "La clôture d'un vol attend désormais la fin réelle du débarquement GSX (en plus de l'annonce cabine), quand GSX a été utilisé pendant ce vol",
+      "L'heure d'arrivée officielle reste celle de la coupure moteurs, inchangée"
+    ]
+  },
+  {
     version: '1.0.26',
     changes: ["Déplacement du réglage du prix du bagage en soute vers la page Économie, par compagnie"]
   },
