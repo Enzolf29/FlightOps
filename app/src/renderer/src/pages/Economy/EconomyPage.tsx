@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useCompanies } from '@renderer/hooks/useCompanies'
+import { useCompanies, useUpdateCompany } from '@renderer/hooks/useCompanies'
 import {
   useAirportSurcharge,
   useCompanyEconomySummary,
@@ -20,6 +20,7 @@ import { greatCircleDistanceNm } from '@shared/flightStatus/computeFlightDistanc
 import { computeReferenceTicketPriceEur } from '@shared/economy/resolveFlightEconomy'
 import { PRICING_TIER_LABEL, PRICING_TIER_FARE_MODEL } from '@shared/types/economy'
 import type { RoutePrice } from '@shared/types/economy'
+import type { Company } from '@shared/types/company'
 
 function referenceTicketPriceEur(
   company: { pricingTier: keyof typeof PRICING_TIER_FARE_MODEL },
@@ -122,6 +123,8 @@ export function EconomyPage() {
             />
           </div>
 
+          <BaggagePriceField company={selectedCompany} />
+
           <div className="fleet-toolbar">
             <button type="button" className="primary" onClick={openCreate}>
               + Ajouter une ligne
@@ -188,6 +191,43 @@ export function EconomyPage() {
           errorMessage={formError}
         />
       ) : null}
+    </div>
+  )
+}
+
+function BaggagePriceField({ company }: { company: Company }) {
+  const updateMutation = useUpdateCompany()
+  const [value, setValue] = useState(company.baggagePriceEur)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    setValue(company.baggagePriceEur)
+  }, [company.id, company.baggagePriceEur])
+
+  function handleSave() {
+    setSaved(false)
+    updateMutation.mutateAsync({ id: company.id, patch: { baggagePriceEur: value } }).then(() => {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    })
+  }
+
+  return (
+    <div className="economy-baggage-field">
+      <p>Prix d'un bagage en soute pour {company.displayName} — appliqué à tous ses vols.</p>
+      <div className="settings-inline-field">
+        <input
+          type="number"
+          min={0}
+          step="0.01"
+          value={value}
+          onChange={(event) => setValue(Number(event.target.value))}
+        />
+        <button type="button" className="primary" onClick={handleSave} disabled={updateMutation.isPending}>
+          {updateMutation.isPending ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
+        {saved ? <span className="settings-saved-hint">Enregistré ✓</span> : null}
+      </div>
     </div>
   )
 }

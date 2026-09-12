@@ -12,6 +12,10 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
   {
+    version: '1.0.26',
+    changes: ["Déplacement du réglage du prix du bagage en soute vers la page Économie, par compagnie"]
+  },
+  {
     version: '1.0.25',
     changes: [
       'Remplacement du prix fret par un prix de bagage en soute, fixé par compagnie et appliqué à tous ses vols',

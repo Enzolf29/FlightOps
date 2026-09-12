@@ -426,7 +426,6 @@ function CompaniesTab() {
   const [radioCallsign, setRadioCallsign] = useState('')
   const [callsignPattern, setCallsignPattern] = useState<CallsignPattern>('XXX0000')
   const [pricingTier, setPricingTier] = useState<PricingTier>('classic')
-  const [baggagePriceEur, setBaggagePriceEur] = useState(25)
   const [error, setError] = useState<string | null>(null)
 
   function startEdit(company: Company) {
@@ -434,14 +433,13 @@ function CompaniesTab() {
     setRadioCallsign(company.radioCallsign)
     setCallsignPattern(company.callsignPattern)
     setPricingTier(company.pricingTier)
-    setBaggagePriceEur(company.baggagePriceEur)
     setError(null)
   }
 
   function save(id: number) {
     setError(null)
     updateMutation
-      .mutateAsync({ id, patch: { radioCallsign: radioCallsign.trim(), callsignPattern, pricingTier, baggagePriceEur } })
+      .mutateAsync({ id, patch: { radioCallsign: radioCallsign.trim(), callsignPattern, pricingTier } })
       .then(() => setEditingId(null))
       .catch((err: Error) => setError(err.message))
   }
@@ -463,7 +461,6 @@ function CompaniesTab() {
           <span>Callsign radio</span>
           <span>Pattern</span>
           <span>Positionnement</span>
-          <span>Prix bagage</span>
           <span></span>
         </div>
         {companies.map((company) => (
@@ -500,15 +497,6 @@ function CompaniesTab() {
                     ))}
                   </select>
                 </span>
-                <span>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={baggagePriceEur}
-                    onChange={(event) => setBaggagePriceEur(Number(event.target.value))}
-                  />
-                </span>
                 <span className="fleet-table-actions">
                   <button
                     type="button"
@@ -528,7 +516,6 @@ function CompaniesTab() {
                 <span>{company.radioCallsign}</span>
                 <span>{CALLSIGN_PATTERN_LABEL[company.callsignPattern]}</span>
                 <span>{PRICING_TIER_LABEL[company.pricingTier]}</span>
-                <span>{formatEur(company.baggagePriceEur)}</span>
                 <span className="fleet-table-actions">
                   <button type="button" onClick={() => startEdit(company)}>
                     Modifier

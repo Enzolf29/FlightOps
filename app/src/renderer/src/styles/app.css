@@ -1374,7 +1374,7 @@ button.danger,
 
 .fleet-table-companies.fleet-table-header,
 .fleet-table-companies.fleet-table-row {
-  grid-template-columns: 2fr 0.7fr 0.7fr 0.9fr 0.9fr 0.9fr 0.8fr 1.6fr;
+  grid-template-columns: 2fr 0.8fr 0.8fr 0.9fr 0.9fr 1fr 1.6fr;
 }
 
 .economy-route-row.fleet-table-header,
@@ -1383,8 +1383,15 @@ button.danger,
 }
 
 .economy-company-field,
-.economy-summary-field {
+.economy-summary-field,
+.economy-baggage-field {
   margin-bottom: 20px;
+}
+
+.economy-baggage-field p {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .economy-map-field {
