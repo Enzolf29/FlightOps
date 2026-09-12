@@ -164,8 +164,7 @@ function CreateTab({ onGenerated }: { onGenerated: () => void }) {
       simbriefFin: selectedAircraft.simbriefFin,
       callsign,
       scheduledDeparture,
-      paxCount: economyResolution?.expectedPassengers,
-      cargoTons: economyResolution ? economyResolution.expectedCargoKg / 1000 : undefined
+      paxCount: economyResolution?.expectedPassengers
     })
 
     window.flightops.app.openExternal(url)
@@ -260,7 +259,6 @@ function CreateTab({ onGenerated }: { onGenerated: () => void }) {
         departureIcao={departureIcao}
         arrivalIcao={arrivalIcao}
         seatCapacity={selectedAircraft?.seatCapacity ?? null}
-        cargoCapacityKg={selectedAircraft?.cargoCapacityKg ?? null}
         onResolutionChange={setEconomyResolution}
       />
 

@@ -334,7 +334,7 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
             items={[
               { key: 'ticket', label: 'Prix billet', value: formatEur(flightEconomy.ticketPriceEur), detail: `Référence ${formatEur(flightEconomy.referenceTicketPriceEur)}` },
               { key: 'pax', label: 'Passagers vendus', value: flightEconomy.passengersSold ?? '—' },
-              { key: 'cargo', label: 'Fret vendu', value: flightEconomy.cargoKgSold !== null ? `${Math.round(flightEconomy.cargoKgSold).toLocaleString('fr-FR')} kg` : '—' },
+              { key: 'baggage', label: 'Bagages en soute', value: flightEconomy.checkedBagsSold !== null ? `${flightEconomy.checkedBagsSold} (${formatEur(flightEconomy.baggagePriceEur)}/bagage)` : '—' },
               { key: 'revenue', label: 'Revenu', value: flightEconomy.revenueEur !== null ? formatEur(flightEconomy.revenueEur) : '—' }
             ]}
           />

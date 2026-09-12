@@ -7,7 +7,7 @@ describe('computeAirportSurcharge', () => {
   })
 
   it('applies the maximum surcharge when no destination is known', () => {
-    expect(computeAirportSurcharge(0)).toBeCloseTo(0.4, 5)
+    expect(computeAirportSurcharge(0)).toBeCloseTo(0.25, 5)
   })
 
   it('decreases continuously (no jump) as the known destination count grows', () => {
@@ -19,7 +19,7 @@ describe('computeAirportSurcharge', () => {
   })
 
   it('reaches the floor at the threshold and never drops below it beyond that', () => {
-    expect(computeAirportSurcharge(15)).toBeCloseTo(0.1, 5)
-    expect(computeAirportSurcharge(50)).toBeCloseTo(0.1, 5)
+    expect(computeAirportSurcharge(6)).toBeCloseTo(0.05, 5)
+    expect(computeAirportSurcharge(50)).toBeCloseTo(0.05, 5)
   })
 })

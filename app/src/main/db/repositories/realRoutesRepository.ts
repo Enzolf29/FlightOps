@@ -209,44 +209,57 @@ export function getKnownDepartureAirports(companyId: number): Array<{ icao: stri
     .all(companyId) as Array<{ icao: string; lastFetchedAt: string | null }>
 }
 
-/** Au-delà de ce nombre d'observations, une même route ne pèse pas plus lourd dans le score
- * d'activité — sans ça, une seule route revérifiée à chaque recherche gonflerait le score d'un
- * aéroport par ailleurs très peu desservi, à tort perçu comme un vrai hub. */
-const OBSERVATION_SCORE_CAP_PER_ROUTE = 5
-
 /**
- * Activité réelle connue (Vols réels/AeroDataBox) pour cette compagnie au départ de cet aéroport —
- * sert de proxy "taille d'aéroport" pour le mode économie (voir computeAirportSurcharge). Somme,
- * route par route, le nombre d'observations plafonné à OBSERVATION_SCORE_CAP_PER_ROUTE — un simple
- * cumul "nombre de destinations + observations" surestimerait un aéroport dont beaucoup de
- * destinations n'ont été vues qu'une seule fois (une grosse recherche AeroDataBox déclare d'un coup
- * des dizaines de routes distinctes) : seules des routes confirmées à plusieurs reprises comptent
- * vraiment pour beaucoup, ce qui distingue un vrai hub souvent revérifié d'un aéroport moyen
- * simplement balayé une fois en largeur.
- *
- * Null si cet aéroport n'a jamais été recherché pour cette compagnie, distinct de 0 (recherché mais
- * aucune destination trouvée).
+ * Nombre de destinations réelles connues (Vols réels/AeroDataBox) pour cette compagnie au départ de
+ * cet aéroport — sert de proxy "taille d'aéroport" pour le mode économie (voir
+ * computeAirportSurcharge). Null si cet aéroport n'a jamais été recherché pour cette compagnie,
+ * distinct de 0 (recherché mais aucune destination trouvée).
  */
-export function getKnownAirportActivityScore(companyId: number, departureIcao: string): number | null {
+export function getKnownDestinationCount(companyId: number, departureIcao: string): number | null {
   const normalized = departureIcao.trim().toUpperCase()
   const searched = getKnownDepartureAirports(companyId).some((entry) => entry.icao === normalized)
   if (!searched) return null
 
   const row = getDb()
-    .prepare(
-      `SELECT SUM(capped) AS score FROM (
-         SELECT MIN(obs_count, ?) AS capped FROM (
-           SELECT COUNT(o.id) AS obs_count
-           FROM real_routes r
-           LEFT JOIN real_route_observations o ON o.real_route_id = r.id
-           WHERE r.company_id = ? AND r.departure_icao = ?
-           GROUP BY r.id
-         )
-       )`
-    )
-    .get(OBSERVATION_SCORE_CAP_PER_ROUTE, companyId, normalized) as { score: number | null }
+    .prepare('SELECT COUNT(*) AS count FROM real_routes WHERE company_id = ? AND departure_icao = ?')
+    .get(companyId, normalized) as { count: number }
 
-  return row.score ?? 0
+  return row.count
+}
+
+/**
+ * Part d'observations de cette ligne précise par rapport à la moyenne des lignes au départ du même
+ * aéroport pour cette compagnie (voir computeRouteSurcharge) — un ratio plutôt qu'un compte absolu,
+ * pour rester stable dans le temps malgré des recherches répétées qui font grossir tous les
+ * compteurs. Ex. LFPG → LFRB observée 5 fois et LFRB → LFPG seulement 2 fois : la seconde a un ratio
+ * plus faible et porte une surtaxe plus forte.
+ *
+ * Null si cette ligne précise n'a jamais été observée dans ce sens, ou si aucune ligne n'est encore
+ * connue au départ de cet aéroport (division par zéro évitée) — dans les deux cas, aucune surtaxe
+ * de ligne n'est appliquée (voir computeRouteSurcharge).
+ */
+export function getRouteObservationShare(companyId: number, departureIcao: string, arrivalIcao: string): number | null {
+  const normalizedDeparture = departureIcao.trim().toUpperCase()
+  const normalizedArrival = arrivalIcao.trim().toUpperCase()
+
+  const rows = getDb()
+    .prepare(
+      `SELECT r.arrival_icao AS arrivalIcao, COUNT(o.id) AS observationCount
+       FROM real_routes r
+       LEFT JOIN real_route_observations o ON o.real_route_id = r.id
+       WHERE r.company_id = ? AND r.departure_icao = ?
+       GROUP BY r.id`
+    )
+    .all(companyId, normalizedDeparture) as Array<{ arrivalIcao: string; observationCount: number }>
+
+  if (rows.length === 0) return null
+  const routeRow = rows.find((row) => row.arrivalIcao === normalizedArrival)
+  if (!routeRow) return null
+
+  const averageObservationCount = rows.reduce((sum, row) => sum + row.observationCount, 0) / rows.length
+  if (averageObservationCount <= 0) return null
+
+  return routeRow.observationCount / averageObservationCount
 }
 
 export function addFlightNumberObservation(routeId: number, flightNumber: string): void {

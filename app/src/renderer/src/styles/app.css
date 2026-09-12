@@ -138,6 +138,7 @@
 .app-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 32px 40px;
 }
 
@@ -1373,7 +1374,7 @@ button.danger,
 
 .fleet-table-companies.fleet-table-header,
 .fleet-table-companies.fleet-table-row {
-  grid-template-columns: 2fr 0.8fr 0.8fr 0.9fr 0.9fr 1fr 1.6fr;
+  grid-template-columns: 2fr 0.7fr 0.7fr 0.9fr 0.9fr 0.9fr 0.8fr 1.6fr;
 }
 
 .economy-route-row.fleet-table-header,
@@ -1396,6 +1397,13 @@ button.danger,
 
 .economy-filter-hint {
   margin-bottom: 4px;
+}
+
+.economy-surcharge-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
 }
 
 .fleet-table-position-time {
@@ -2962,21 +2970,19 @@ button.danger,
 .update-status-badge { flex: 0 0 auto; padding: 7px 10px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-size: 11px; font-weight: 800; }
 .update-status-badge--downloaded, .update-status-badge--up_to_date { background: color-mix(in srgb, var(--status-on-time) 13%, transparent); color: var(--status-on-time); }
 .update-status-badge--error { background: color-mix(in srgb, var(--status-delayed-high) 13%, transparent); color: var(--status-delayed-high); }
-.update-status-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-app); }
-.update-status-row > div:first-child { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.update-status-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; padding: 13px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-app); }
+.update-status-row > div:first-child { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 200px; }
 .update-status-row strong { font-size: 13px; }
 .update-status-row small { color: var(--text-muted); font-size: 10px; }
-.update-status-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+.update-status-actions { display: flex; flex-wrap: wrap; gap: 8px; flex: 0 0 auto; }
 .update-progress { height: 7px; margin-top: 10px; overflow: hidden; border-radius: 999px; background: var(--bg-app); }
 .update-progress span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .25s ease; }
 
 .changelog-body { font-size: 13px; line-height: 1.55; }
-.changelog-body h4 { margin: 14px 0 6px; font-size: 13px; color: var(--text-primary); }
-.changelog-body h4:first-child { margin-top: 0; }
-.changelog-body p { margin: 0 0 8px; color: var(--text-secondary); }
-.changelog-body ul { margin: 0 0 10px; padding-left: 20px; color: var(--text-secondary); }
-.changelog-body li { margin-bottom: 4px; }
-.changelog-body a { color: var(--accent); }
+.changelog-entry h4 { margin: 14px 0 6px; font-size: 13px; color: var(--text-primary); }
+.changelog-entry:first-child h4 { margin-top: 0; }
+.changelog-entry ul { margin: 0; padding-left: 20px; color: var(--text-secondary); }
+.changelog-entry li { margin-bottom: 4px; }
 .update-preserve-note { margin-bottom: 0 !important; color: var(--text-muted) !important; font-size: 11px !important; }
 @media (max-width: 620px) {
   .update-settings-heading, .update-status-row { align-items: stretch; flex-direction: column; }

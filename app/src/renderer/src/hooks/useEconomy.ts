@@ -69,6 +69,21 @@ export function useAirportSurcharge(companyId: number | null, departureIcao: str
   })
 }
 
+/** Surtaxe propre à cette ligne précise (voir computeRouteSurcharge), basée sur sa part
+ * d'observations par rapport aux autres lignes connues au départ du même aéroport. */
+export function useRouteSurcharge(
+  companyId: number | null,
+  departureIcao: string,
+  arrivalIcao: string,
+  enabled: boolean
+) {
+  return useQuery<number>({
+    queryKey: ['economy', 'routeSurcharge', companyId, departureIcao, arrivalIcao],
+    queryFn: () => window.flightops.economy.getRouteSurcharge(companyId as number, departureIcao, arrivalIcao),
+    enabled: enabled && companyId !== null && departureIcao.trim().length >= 3 && arrivalIcao.trim().length >= 3
+  })
+}
+
 export function useUpsertRoutePrice() {
   const queryClient = useQueryClient()
   return useMutation({

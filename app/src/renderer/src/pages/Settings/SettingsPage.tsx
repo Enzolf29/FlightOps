@@ -127,9 +127,7 @@ function AppUpdateSection() {
       ) : null}
       <p className="update-preserve-note">Une mise à jour conserve la flotte, les vols, les PIREPs, les réglages et les annonces cabine stockés sur ce PC.</p>
 
-      {showChangelog ? (
-        <ChangelogModal version={status?.currentVersion ?? '—'} onClose={() => setShowChangelog(false)} />
-      ) : null}
+      {showChangelog ? <ChangelogModal onClose={() => setShowChangelog(false)} /> : null}
     </section>
   )
 }

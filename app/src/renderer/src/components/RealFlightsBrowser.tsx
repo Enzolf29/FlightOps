@@ -459,8 +459,7 @@ function BookRealRouteModal({ route, company, onClose, onGenerated }: {
       callsign,
       scheduledDeparture,
       scheduledArrival,
-      paxCount: economyResolution?.expectedPassengers,
-      cargoTons: economyResolution ? economyResolution.expectedCargoKg / 1000 : undefined
+      paxCount: economyResolution?.expectedPassengers
     }))
     setGenerated(true)
   }
@@ -491,7 +490,6 @@ function BookRealRouteModal({ route, company, onClose, onGenerated }: {
             departureIcao={route.departureIcao}
             arrivalIcao={route.arrivalIcao}
             seatCapacity={selectedAircraft?.seatCapacity ?? null}
-            cargoCapacityKg={selectedAircraft?.cargoCapacityKg ?? null}
             onResolutionChange={setEconomyResolution}
           />
           {error ? <p className="form-error">{error}</p> : null}

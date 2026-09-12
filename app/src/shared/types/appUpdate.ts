@@ -16,10 +16,3 @@ export interface AppUpdateStatus {
   message: string
 }
 
-/** Notes de version publiées sur GitHub pour la version installée — voir getLatestReleaseChangelog. */
-export interface ReleaseChangelog {
-  version: string
-  publishedAt: string | null
-  body: string | null
-  htmlUrl: string | null
-}

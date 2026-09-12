@@ -28,9 +28,11 @@ export const PRICING_TIER_FARE_MODEL: Record<PricingTier, PricingTierFareModel> 
   premium: { baseFareEur: 120, perNmEur: 0.16 }
 }
 
-/** Tarif fret de référence €/kg — le marché du fret aérien ne se différencie pas par positionnement
- * compagnie comme le prix du billet passager. */
-export const REFERENCE_CARGO_PRICE_EUR_PER_KG = 3
+/** Part de passagers qui enregistrent un bagage en soute, tirée au hasard à chaque vol dans cette
+ * fourchette — indépendante du positionnement compagnie (contrairement au prix, fixé une fois pour
+ * toutes par compagnie, voir Company.baggagePriceEur). */
+export const BAGGAGE_CHECK_SHARE_MIN = 0.4
+export const BAGGAGE_CHECK_SHARE_MAX = 0.9
 
 /** Distance à partir de laquelle un vol est considéré long-courrier (active le calcul
  * business/première, voir PRICING_TIER_CABIN_SPLIT). */
@@ -69,8 +71,6 @@ export interface RoutePrice {
   arrivalIcao: string
   ticketPriceMinEur: number
   ticketPriceMaxEur: number
-  cargoPriceMinEurPerKg: number
-  cargoPriceMaxEurPerKg: number
 }
 
 export interface RoutePriceInput {
@@ -79,44 +79,40 @@ export interface RoutePriceInput {
   arrivalIcao: string
   ticketPriceMinEur: number
   ticketPriceMaxEur: number
-  cargoPriceMinEurPerKg: number
-  cargoPriceMaxEurPerKg: number
 }
 
 export interface FlightEconomy {
   flightId: number
   ticketPriceEur: number
-  cargoPriceEurPerKg: number
   referenceTicketPriceEur: number
-  referenceCargoPriceEurPerKg: number
   /** >1 sur un vol long-courrier : capture le supplément business/première (voir
    * PRICING_TIER_CABIN_SPLIT), sans fausser ticketPriceEur qui reste le tarif économique affiché. */
   cabinRevenueMultiplier: number
+  /** Prix d'un bagage en soute, fixé par la compagnie (Company.baggagePriceEur) — identique sur
+   * tous ses vols, à la différence du tarif billet qui varie par ligne. */
+  baggagePriceEur: number
   passengersSold: number | null
-  cargoKgSold: number | null
+  /** Tiré au hasard parmi passengersSold à la création du vol (voir resolveCheckedBagsSold), une
+   * fois le nombre réel de passagers connu — pas de prix ni de fourchette à régler par ligne. */
+  checkedBagsSold: number | null
   revenueEur: number | null
 }
 
 export interface FlightEconomyInput {
   flightId: number
   ticketPriceEur: number
-  cargoPriceEurPerKg: number
   referenceTicketPriceEur: number
-  referenceCargoPriceEurPerKg: number
   cabinRevenueMultiplier: number
+  baggagePriceEur: number
   passengersSold: number | null
-  cargoKgSold: number | null
 }
 
 /** Résultat du calcul de demande, résolu avant réservation SimBrief (voir resolveFlightEconomy). */
 export interface ResolvedFlightEconomy {
   ticketPriceEur: number
-  cargoPriceEurPerKg: number
   referenceTicketPriceEur: number
-  referenceCargoPriceEurPerKg: number
   cabinRevenueMultiplier: number
   expectedPassengers: number
-  expectedCargoKg: number
 }
 
 export interface RoutePriceWithStats extends RoutePrice {

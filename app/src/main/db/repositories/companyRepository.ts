@@ -3,7 +3,7 @@ import type { CallsignPattern, Company, CompanyPatch } from '@shared/types/compa
 import type { PricingTier } from '@shared/types/economy'
 
 const SELECT_COMPANY =
-  'SELECT id, icao_code, iata_code, radio_callsign, display_name, logo_filename, callsign_pattern, active, pricing_tier FROM companies'
+  'SELECT id, icao_code, iata_code, radio_callsign, display_name, logo_filename, callsign_pattern, active, pricing_tier, baggage_price_eur FROM companies'
 
 interface CompanyRow {
   id: number
@@ -15,6 +15,7 @@ interface CompanyRow {
   callsign_pattern: CallsignPattern
   active: number
   pricing_tier: PricingTier
+  baggage_price_eur: number
 }
 
 function mapCompany(row: CompanyRow): Company {
@@ -27,7 +28,8 @@ function mapCompany(row: CompanyRow): Company {
     logoFilename: row.logo_filename,
     callsignPattern: row.callsign_pattern,
     active: row.active === 1,
-    pricingTier: row.pricing_tier
+    pricingTier: row.pricing_tier,
+    baggagePriceEur: row.baggage_price_eur
   }
 }
 
@@ -54,14 +56,23 @@ export function updateCompany(id: number, patch: CompanyPatch): Company {
     radio_callsign: patch.radioCallsign ?? current.radio_callsign,
     callsign_pattern: patch.callsignPattern ?? current.callsign_pattern,
     active: patch.active !== undefined ? (patch.active ? 1 : 0) : current.active,
-    pricing_tier: patch.pricingTier ?? current.pricing_tier
+    pricing_tier: patch.pricingTier ?? current.pricing_tier,
+    baggage_price_eur: patch.baggagePriceEur ?? current.baggage_price_eur
   }
 
   getDb()
     .prepare(
-      'UPDATE companies SET display_name = ?, radio_callsign = ?, callsign_pattern = ?, active = ?, pricing_tier = ? WHERE id = ?'
+      'UPDATE companies SET display_name = ?, radio_callsign = ?, callsign_pattern = ?, active = ?, pricing_tier = ?, baggage_price_eur = ? WHERE id = ?'
     )
-    .run(next.display_name, next.radio_callsign, next.callsign_pattern, next.active, next.pricing_tier, id)
+    .run(
+      next.display_name,
+      next.radio_callsign,
+      next.callsign_pattern,
+      next.active,
+      next.pricing_tier,
+      next.baggage_price_eur,
+      id
+    )
 
   return mapCompany({ ...current, ...next })
 }

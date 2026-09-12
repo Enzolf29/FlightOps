@@ -80,12 +80,11 @@ describe('resolveFlightEconomy', () => {
     // ci-dessus) pour ne pas casser les valeurs numériques attendues plus bas.
     referenceFareModel: { baseFareEur: 0, perNmEur: 0.1 },
     airportSurchargeFraction: 0,
+    routeSurchargeFraction: 0,
     cabinSplit: PRICING_TIER_CABIN_SPLIT.classic,
     routePrice: {
       ticketPriceMinEur: 80,
-      ticketPriceMaxEur: 120,
-      cargoPriceMinEurPerKg: 2,
-      cargoPriceMaxEurPerKg: 4
+      ticketPriceMaxEur: 120
     },
     // LFPG -> LFML (Paris-Marseille, ~400 NM) : distance assez longue pour que le prix de
     // référence (~40€ à 0,1€/NM) distingue vraiment un tarif raisonnable d'un tarif abusif.
@@ -93,61 +92,58 @@ describe('resolveFlightEconomy', () => {
     originLon: 2.5479,
     destLat: 43.4393,
     destLon: 5.2214,
-    seatCapacity: 180,
-    cargoCapacityKg: 2000
+    seatCapacity: 180
   }
 
-  it('draws the ticket and cargo price linearly within the configured range', () => {
-    // random() = 0 -> borne basse, 0.5 -> milieu de la fourchette prix, puis jitter demande
-    const result = resolveFlightEconomy(baseInput, sequenceRandom([0, 0.5, 0.5, 0.5]))
+  it('draws the ticket price linearly within the configured range', () => {
+    // random() = 0 -> borne basse, puis jitter demande
+    const result = resolveFlightEconomy(baseInput, sequenceRandom([0, 0.5]))
     expect(result.ticketPriceEur).toBe(80)
-    expect(result.cargoPriceEurPerKg).toBe(3)
   })
 
   it('computes the reference ticket price from great-circle distance × tier fare per NM', () => {
-    const result = resolveFlightEconomy(baseInput, sequenceRandom([0, 0, 0.5, 0.5]))
+    const result = resolveFlightEconomy(baseInput, sequenceRandom([0, 0.5]))
     // ~400 NM à vol d'oiseau × 0,1 €/NM -> référence de l'ordre de 30-50€
     expect(result.referenceTicketPriceEur).toBeGreaterThan(20)
     expect(result.referenceTicketPriceEur).toBeLessThan(60)
   })
 
-  it('raises the reference ticket price by the airport surcharge fraction', () => {
-    const withoutSurcharge = resolveFlightEconomy(baseInput, sequenceRandom([0, 0, 0.5, 0.5]))
+  it('raises the reference ticket price by the airport and route surcharge fractions', () => {
+    const withoutSurcharge = resolveFlightEconomy(baseInput, sequenceRandom([0, 0.5]))
     const withSurcharge = resolveFlightEconomy(
-      { ...baseInput, airportSurchargeFraction: 0.25 },
-      sequenceRandom([0, 0, 0.5, 0.5])
+      { ...baseInput, airportSurchargeFraction: 0.15, routeSurchargeFraction: 0.1 },
+      sequenceRandom([0, 0.5])
     )
     expect(withSurcharge.referenceTicketPriceEur).toBeCloseTo(withoutSurcharge.referenceTicketPriceEur * 1.25, 1)
   })
 
   it('yields far fewer expected passengers when priced well above the reference than at the floor price', () => {
-    const cheap = resolveFlightEconomy(baseInput, sequenceRandom([0, 0, 0.5, 0.5]))
+    const cheap = resolveFlightEconomy(baseInput, sequenceRandom([0, 0.5]))
     const expensive = resolveFlightEconomy(
-      { ...baseInput, routePrice: { ...baseInput.routePrice, ticketPriceMinEur: 500, ticketPriceMaxEur: 500 } },
-      sequenceRandom([0, 0, 0.5, 0.5])
+      { ...baseInput, routePrice: { ticketPriceMinEur: 500, ticketPriceMaxEur: 500 } },
+      sequenceRandom([0, 0.5])
     )
     expect(expensive.expectedPassengers).toBeLessThan(cheap.expectedPassengers)
   })
 
   it('keeps a cabin revenue multiplier of 1 on a medium-haul route below the long-haul threshold', () => {
-    const result = resolveFlightEconomy(baseInput, sequenceRandom([0, 0, 0.5, 0.5]))
+    const result = resolveFlightEconomy(baseInput, sequenceRandom([0, 0.5]))
     expect(result.cabinRevenueMultiplier).toBe(1)
   })
 
   it('raises the cabin revenue multiplier on a long-haul route', () => {
     const result = resolveFlightEconomy(
       { ...baseInput, originLat: 49.0097, originLon: 2.5479, destLat: 25.2532, destLon: 55.3657 }, // Paris -> Dubaï, long-courrier
-      sequenceRandom([0, 0, 0.5, 0.5])
+      sequenceRandom([0, 0.5])
     )
     expect(result.cabinRevenueMultiplier).toBeGreaterThan(1)
   })
 
-  it('never exceeds seat or cargo capacity', () => {
+  it('never exceeds seat capacity', () => {
     const result = resolveFlightEconomy(
-      { ...baseInput, routePrice: { ...baseInput.routePrice, ticketPriceMinEur: 0.01, ticketPriceMaxEur: 0.01 } },
-      sequenceRandom([0, 0, 1, 1])
+      { ...baseInput, routePrice: { ticketPriceMinEur: 0.01, ticketPriceMaxEur: 0.01 } },
+      sequenceRandom([0, 1])
     )
     expect(result.expectedPassengers).toBeLessThanOrEqual(baseInput.seatCapacity)
-    expect(result.expectedCargoKg).toBeLessThanOrEqual(baseInput.cargoCapacityKg)
   })
 })

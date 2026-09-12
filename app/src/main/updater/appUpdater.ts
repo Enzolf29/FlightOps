@@ -1,11 +1,10 @@
 import { app, BrowserWindow } from 'electron'
 import electronUpdater from 'electron-updater'
-import type { AppUpdateStatus, ReleaseChangelog } from '@shared/types/appUpdate'
+import type { AppUpdateStatus } from '@shared/types/appUpdate'
 import { IPC } from '@shared/ipc/contract'
 
 const INITIAL_CHECK_DELAY_MS = 15_000
 const PERIODIC_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
-const GITHUB_REPO = 'Enzolf29/FlightOps'
 
 const { autoUpdater } = electronUpdater
 let periodicTimer: ReturnType<typeof setInterval> | null = null
@@ -51,29 +50,6 @@ export async function checkForAppUpdates(): Promise<AppUpdateStatus> {
     publish({ phase: 'error', message: readableError(error as Error) })
   }
   return status
-}
-
-/** Notes de version publiées sur GitHub pour la version actuellement installée — sert au bouton
- * "Changelog" des paramètres. Retourne des champs null si le dépôt n'a pas de release pour cette
- * version (ex. build de développement) ou en cas d'échec réseau, plutôt que de lever une erreur. */
-export async function getLatestReleaseChangelog(): Promise<ReleaseChangelog> {
-  const version = app.getVersion()
-  const empty: ReleaseChangelog = { version, publishedAt: null, body: null, htmlUrl: null }
-  try {
-    const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/tags/v${version}`, {
-      headers: { Accept: 'application/vnd.github+json' }
-    })
-    if (!response.ok) return empty
-    const data = (await response.json()) as { body?: string; published_at?: string; html_url?: string }
-    return {
-      version,
-      publishedAt: data.published_at ?? null,
-      body: data.body ?? null,
-      htmlUrl: data.html_url ?? null
-    }
-  } catch {
-    return empty
-  }
 }
 
 export function installDownloadedUpdate(): void {

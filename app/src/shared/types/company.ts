@@ -14,6 +14,9 @@ export interface Company {
   active: boolean
   /** Positionnement tarifaire (mode économie) — détermine le tarif de référence €/NM, fixe. */
   pricingTier: PricingTier
+  /** Prix d'un bagage en soute (mode économie) — politique compagnie modifiable, identique sur
+   * tous ses vols (contrairement au tarif billet, qui se règle ligne par ligne). */
+  baggagePriceEur: number
 }
 
 export interface CompanyPatch {
@@ -22,4 +25,5 @@ export interface CompanyPatch {
   callsignPattern?: CallsignPattern
   active?: boolean
   pricingTier?: PricingTier
+  baggagePriceEur?: number
 }

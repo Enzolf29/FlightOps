@@ -90,7 +90,6 @@ export const IPC = {
     getStatus: 'updates:getStatus',
     check: 'updates:check',
     install: 'updates:install',
-    getChangelog: 'updates:getChangelog',
     statusChanged: 'updates:statusChanged'
   },
   app: {
@@ -112,6 +111,7 @@ export const IPC = {
     getFlightEconomy: 'economy:getFlightEconomy',
     getCompanyEconomySummary: 'economy:getCompanyEconomySummary',
     getAircraftEconomySummary: 'economy:getAircraftEconomySummary',
-    getAirportSurcharge: 'economy:getAirportSurcharge'
+    getAirportSurcharge: 'economy:getAirportSurcharge',
+    getRouteSurcharge: 'economy:getRouteSurcharge'
   }
 } as const

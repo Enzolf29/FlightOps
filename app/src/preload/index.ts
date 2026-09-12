@@ -16,7 +16,7 @@ import type { StatisticsOverview } from '@shared/types/statistics'
 import type { FlightEvent } from '@shared/flightStatus/evaluateFlightEvents'
 import type { CabinAnnouncementFile, CabinAnnouncementType } from '@shared/types/cabinAnnouncements'
 import type { TabletCabinCommand, TabletCabinStatus, TabletServerInfo } from '@shared/types/tablet'
-import type { AppUpdateStatus, ReleaseChangelog } from '@shared/types/appUpdate'
+import type { AppUpdateStatus } from '@shared/types/appUpdate'
 import type { GsxCostStats, GsxReceipt } from '@shared/types/gsxReceipt'
 import type { CompanyEconomySummary, FlightEconomy, RoutePrice, RoutePriceInput } from '@shared/types/economy'
 import type { FlightopsApi } from '@shared/ipc/api'
@@ -151,7 +151,6 @@ const flightopsApi: FlightopsApi = {
     getStatus: (): Promise<AppUpdateStatus> => ipcRenderer.invoke(IPC.updates.getStatus),
     check: (): Promise<AppUpdateStatus> => ipcRenderer.invoke(IPC.updates.check),
     install: (): Promise<void> => ipcRenderer.invoke(IPC.updates.install),
-    getChangelog: (): Promise<ReleaseChangelog> => ipcRenderer.invoke(IPC.updates.getChangelog),
     onStatusChange: (listener: (status: AppUpdateStatus) => void): (() => void) => {
       const wrapped = (_event: IpcRendererEvent, status: AppUpdateStatus): void => listener(status)
       ipcRenderer.on(IPC.updates.statusChanged, wrapped)
@@ -189,7 +188,9 @@ const flightopsApi: FlightopsApi = {
     getAircraftEconomySummary: (aircraftId: number): Promise<CompanyEconomySummary> =>
       ipcRenderer.invoke(IPC.economy.getAircraftEconomySummary, aircraftId),
     getAirportSurcharge: (companyId: number, departureIcao: string): Promise<number> =>
-      ipcRenderer.invoke(IPC.economy.getAirportSurcharge, companyId, departureIcao)
+      ipcRenderer.invoke(IPC.economy.getAirportSurcharge, companyId, departureIcao),
+    getRouteSurcharge: (companyId: number, departureIcao: string, arrivalIcao: string): Promise<number> =>
+      ipcRenderer.invoke(IPC.economy.getRouteSurcharge, companyId, departureIcao, arrivalIcao)
   }
 }
 

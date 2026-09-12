@@ -8,15 +8,9 @@ import { getCompanyById } from '../db/repositories/companyRepository'
 import { createFlight, getFlightWithRelationsById } from '../db/repositories/flightRepository'
 import { createFlightEconomy } from '../db/repositories/economyRepository'
 
-const LBS_PER_KG = 2.2046226218
-
-function readSoldPassengersAndCargo(simbriefOfpJson: string | null): { passengersSold: number | null; cargoKgSold: number | null } {
-  if (!simbriefOfpJson) return { passengersSold: null, cargoKgSold: null }
-  const loadsheet = parseOfpDetail(simbriefOfpJson)?.loadsheet
-  if (!loadsheet) return { passengersSold: null, cargoKgSold: null }
-
-  const cargoKgSold = loadsheet.cargo === null ? null : loadsheet.units === 'lbs' ? loadsheet.cargo / LBS_PER_KG : loadsheet.cargo
-  return { passengersSold: loadsheet.paxCount, cargoKgSold }
+function readSoldPassengers(simbriefOfpJson: string | null): number | null {
+  if (!simbriefOfpJson) return null
+  return parseOfpDetail(simbriefOfpJson)?.loadsheet?.paxCount ?? null
 }
 
 export function registerBookingHandlers(): void {
@@ -49,16 +43,13 @@ export function registerBookingHandlers(): void {
     })
 
     if (input.economy) {
-      const { passengersSold, cargoKgSold } = readSoldPassengersAndCargo(input.simbriefOfpJson)
       createFlightEconomy({
         flightId: id,
         ticketPriceEur: input.economy.ticketPriceEur,
-        cargoPriceEurPerKg: input.economy.cargoPriceEurPerKg,
         referenceTicketPriceEur: input.economy.referenceTicketPriceEur,
-        referenceCargoPriceEurPerKg: input.economy.referenceCargoPriceEurPerKg,
         cabinRevenueMultiplier: input.economy.cabinRevenueMultiplier,
-        passengersSold,
-        cargoKgSold
+        baggagePriceEur: company.baggagePriceEur,
+        passengersSold: readSoldPassengers(input.simbriefOfpJson)
       })
     }
 

@@ -2,9 +2,7 @@ import type { FlightSource } from './flight'
 
 export interface CreateFlightFromOfpEconomyInput {
   ticketPriceEur: number
-  cargoPriceEurPerKg: number
   referenceTicketPriceEur: number
-  referenceCargoPriceEurPerKg: number
   cabinRevenueMultiplier: number
 }
 
@@ -22,7 +20,7 @@ export interface CreateFlightFromOfpInput {
   simbriefOfpJson: string | null
   source: FlightSource
   /** Prix résolus au moment de la réservation (voir resolveFlightEconomy) — présent seulement si le
-   * mode économie était actif pour ce vol. Le nombre réel de passagers/fret est relu depuis l'OFP
-   * importé (simbriefOfpJson), pas depuis cette valeur. */
+   * mode économie était actif pour ce vol. Le nombre réel de passagers est relu depuis l'OFP importé
+   * (simbriefOfpJson), pas depuis cette valeur ; le prix du bagage en soute vient de la compagnie. */
   economy?: CreateFlightFromOfpEconomyInput | null
 }

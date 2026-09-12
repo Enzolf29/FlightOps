@@ -13,7 +13,7 @@ import type { StatisticsOverview } from '../types/statistics'
 import type { FlightEvent } from '../flightStatus/evaluateFlightEvents'
 import type { CabinAnnouncementFile, CabinAnnouncementType } from '../types/cabinAnnouncements'
 import type { TabletCabinCommand, TabletCabinStatus, TabletServerInfo } from '../types/tablet'
-import type { AppUpdateStatus, ReleaseChangelog } from '../types/appUpdate'
+import type { AppUpdateStatus } from '../types/appUpdate'
 import type { GsxCostStats, GsxReceipt } from '../types/gsxReceipt'
 import type { CompanyEconomySummary, FlightEconomy, RoutePrice, RoutePriceInput } from '../types/economy'
 
@@ -109,7 +109,6 @@ export interface FlightopsApi {
     getStatus: () => Promise<AppUpdateStatus>
     check: () => Promise<AppUpdateStatus>
     install: () => Promise<void>
-    getChangelog: () => Promise<ReleaseChangelog>
     onStatusChange: (listener: (status: AppUpdateStatus) => void) => () => void
   }
   app: {
@@ -136,5 +135,6 @@ export interface FlightopsApi {
     getCompanyEconomySummary: (companyId: number) => Promise<CompanyEconomySummary>
     getAircraftEconomySummary: (aircraftId: number) => Promise<CompanyEconomySummary>
     getAirportSurcharge: (companyId: number, departureIcao: string) => Promise<number>
+    getRouteSurcharge: (companyId: number, departureIcao: string, arrivalIcao: string) => Promise<number>
   }
 }

@@ -7,7 +7,6 @@ import type { CreateFlightFromOfpEconomyInput } from '@shared/types/booking'
 export interface BookingEconomyResolution {
   economyInput: CreateFlightFromOfpEconomyInput
   expectedPassengers: number
-  expectedCargoKg: number
 }
 
 /** Résout le prix pratiqué et la demande attendue pour un vol au moment de sa réservation, avant
@@ -17,8 +16,8 @@ export function resolveBookingEconomy(
   routePrice: RoutePrice,
   pricingTier: PricingTier,
   seatCapacity: number,
-  cargoCapacityKg: number,
-  airportSurchargeFraction: number
+  airportSurchargeFraction: number,
+  routeSurchargeFraction: number
 ): BookingEconomyResolution | null {
   const origin = getAirportCoordinates(routePrice.departureIcao)
   const dest = getAirportCoordinates(routePrice.arrivalIcao)
@@ -27,25 +26,22 @@ export function resolveBookingEconomy(
   const resolved = resolveFlightEconomy({
     referenceFareModel: PRICING_TIER_FARE_MODEL[pricingTier],
     airportSurchargeFraction,
+    routeSurchargeFraction,
     cabinSplit: PRICING_TIER_CABIN_SPLIT[pricingTier],
     routePrice,
     originLat: origin.lat,
     originLon: origin.lon,
     destLat: dest.lat,
     destLon: dest.lon,
-    seatCapacity,
-    cargoCapacityKg
+    seatCapacity
   })
 
   return {
     economyInput: {
       ticketPriceEur: resolved.ticketPriceEur,
-      cargoPriceEurPerKg: resolved.cargoPriceEurPerKg,
       referenceTicketPriceEur: resolved.referenceTicketPriceEur,
-      referenceCargoPriceEurPerKg: resolved.referenceCargoPriceEurPerKg,
       cabinRevenueMultiplier: resolved.cabinRevenueMultiplier
     },
-    expectedPassengers: resolved.expectedPassengers,
-    expectedCargoKg: resolved.expectedCargoKg
+    expectedPassengers: resolved.expectedPassengers
   }
 }

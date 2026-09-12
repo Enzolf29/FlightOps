@@ -16,8 +16,6 @@ export function RoutePriceForm({ companyId, initial, onSubmit, onClose, submitti
   const [arrivalIcao, setArrivalIcao] = useState(initial?.arrivalIcao ?? '')
   const [ticketMin, setTicketMin] = useState(initial?.ticketPriceMinEur ?? 50)
   const [ticketMax, setTicketMax] = useState(initial?.ticketPriceMaxEur ?? 150)
-  const [cargoMin, setCargoMin] = useState(initial?.cargoPriceMinEurPerKg ?? 2)
-  const [cargoMax, setCargoMax] = useState(initial?.cargoPriceMaxEurPerKg ?? 4)
   const [validationError, setValidationError] = useState<string | null>(null)
 
   function handleSubmit(event: FormEvent) {
@@ -26,7 +24,7 @@ export function RoutePriceForm({ companyId, initial, onSubmit, onClose, submitti
       setValidationError('Renseignez les deux aéroports.')
       return
     }
-    if (ticketMax < ticketMin || cargoMax < cargoMin) {
+    if (ticketMax < ticketMin) {
       setValidationError('Le prix maximum doit être supérieur ou égal au minimum.')
       return
     }
@@ -36,9 +34,7 @@ export function RoutePriceForm({ companyId, initial, onSubmit, onClose, submitti
       departureIcao: departureIcao.trim().toUpperCase(),
       arrivalIcao: arrivalIcao.trim().toUpperCase(),
       ticketPriceMinEur: ticketMin,
-      ticketPriceMaxEur: ticketMax,
-      cargoPriceMinEurPerKg: cargoMin,
-      cargoPriceMaxEurPerKg: cargoMax
+      ticketPriceMaxEur: ticketMax
     })
   }
 
@@ -74,14 +70,6 @@ export function RoutePriceForm({ companyId, initial, onSubmit, onClose, submitti
         <label className="form-field">
           <span>Prix billet maximum (€)</span>
           <input type="number" min={0} step="0.01" value={ticketMax} onChange={(event) => setTicketMax(Number(event.target.value))} required />
-        </label>
-        <label className="form-field">
-          <span>Prix fret minimum (€/kg)</span>
-          <input type="number" min={0} step="0.01" value={cargoMin} onChange={(event) => setCargoMin(Number(event.target.value))} required />
-        </label>
-        <label className="form-field">
-          <span>Prix fret maximum (€/kg)</span>
-          <input type="number" min={0} step="0.01" value={cargoMax} onChange={(event) => setCargoMax(Number(event.target.value))} required />
         </label>
 
         {(validationError ?? errorMessage) ? <p className="form-error">{validationError ?? errorMessage}</p> : null}

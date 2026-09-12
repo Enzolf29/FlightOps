@@ -6,6 +6,7 @@ import {
   useDeleteRoutePrice,
   useRouteGsxCostHint,
   useRoutePricesForCompany,
+  useRouteSurcharge,
   useUpsertRoutePrice
 } from '@renderer/hooks/useEconomy'
 import { CompanyPicker } from '@renderer/components/CompanyPicker'
@@ -23,13 +24,17 @@ import type { RoutePrice } from '@shared/types/economy'
 function referenceTicketPriceEur(
   company: { pricingTier: keyof typeof PRICING_TIER_FARE_MODEL },
   routePrice: RoutePrice,
-  airportSurchargeFraction: number
+  airportSurchargeFraction: number,
+  routeSurchargeFraction: number
 ): number | null {
   const origin = getAirportCoordinates(routePrice.departureIcao)
   const dest = getAirportCoordinates(routePrice.arrivalIcao)
   if (!origin || !dest) return null
   const distanceNm = greatCircleDistanceNm(origin.lat, origin.lon, dest.lat, dest.lon)
-  return computeReferenceTicketPriceEur(PRICING_TIER_FARE_MODEL[company.pricingTier], distanceNm) * (1 + airportSurchargeFraction)
+  return (
+    computeReferenceTicketPriceEur(PRICING_TIER_FARE_MODEL[company.pricingTier], distanceNm) *
+    (1 + airportSurchargeFraction + routeSurchargeFraction)
+  )
 }
 
 export function EconomyPage() {
@@ -149,7 +154,7 @@ export function EconomyPage() {
                 <span>Ligne</span>
                 <span>Prix billet</span>
                 <span>Réf. billet</span>
-                <span>Prix fret</span>
+                <span>Surtaxes</span>
                 <span>Coût GSX moyen</span>
                 <span></span>
               </div>
@@ -210,8 +215,11 @@ function RoutePriceRow({
 }: RoutePriceRowProps) {
   const { data: gsxHint } = useRouteGsxCostHint(company.id, routePrice.departureIcao, routePrice.arrivalIcao, true)
   const { data: airportSurcharge } = useAirportSurcharge(company.id, routePrice.departureIcao, true)
+  const { data: routeSurcharge } = useRouteSurcharge(company.id, routePrice.departureIcao, routePrice.arrivalIcao, true)
   const referencePrice =
-    airportSurcharge !== undefined ? referenceTicketPriceEur(company, routePrice, airportSurcharge) : null
+    airportSurcharge !== undefined && routeSurcharge !== undefined
+      ? referenceTicketPriceEur(company, routePrice, airportSurcharge, routeSurcharge)
+      : null
 
   return (
     <div className="fleet-table-row economy-route-row">
@@ -222,8 +230,10 @@ function RoutePriceRow({
         {formatEur(routePrice.ticketPriceMinEur)} – {formatEur(routePrice.ticketPriceMaxEur)}
       </span>
       <span className="text-muted">{referencePrice !== null ? formatEur(referencePrice) : '—'}</span>
-      <span>
-        {formatEur(routePrice.cargoPriceMinEurPerKg)} – {formatEur(routePrice.cargoPriceMaxEurPerKg)}/kg
+      <span className="economy-surcharge-detail text-muted">
+        {airportSurcharge ? <span>Aéroport +{Math.round(airportSurcharge * 100)}%</span> : null}
+        {routeSurcharge ? <span>Ligne +{Math.round(routeSurcharge * 100)}%</span> : null}
+        {!airportSurcharge && !routeSurcharge ? '—' : null}
       </span>
       <span className="text-muted">
         {gsxHint && gsxHint.averageGsxCostEur !== null

@@ -1,12 +1,12 @@
 import { getDb } from '../index'
 import type { CompanyEconomySummary, FlightEconomy, FlightEconomyInput, RoutePrice, RoutePriceInput } from '@shared/types/economy'
 import type { PirepWithFlight } from '@shared/types/pirep'
+import { resolveCheckedBagsSold } from '@shared/economy/resolveCheckedBaggage'
 import { getGsxCostStatsForFlights } from '../../gsx/gsxReceiptsRepository'
 import { getAllPireps, getPirepsByAircraft } from './pirepRepository'
 
 const SELECT_ROUTE_PRICE =
-  `SELECT id, company_id, departure_icao, arrival_icao, ticket_price_min_eur, ticket_price_max_eur,
-    cargo_price_min_eur_per_kg, cargo_price_max_eur_per_kg
+  `SELECT id, company_id, departure_icao, arrival_icao, ticket_price_min_eur, ticket_price_max_eur
    FROM route_prices`
 
 interface RoutePriceRow {
@@ -16,8 +16,6 @@ interface RoutePriceRow {
   arrival_icao: string
   ticket_price_min_eur: number
   ticket_price_max_eur: number
-  cargo_price_min_eur_per_kg: number
-  cargo_price_max_eur_per_kg: number
 }
 
 function mapRoutePrice(row: RoutePriceRow): RoutePrice {
@@ -27,9 +25,7 @@ function mapRoutePrice(row: RoutePriceRow): RoutePrice {
     departureIcao: row.departure_icao,
     arrivalIcao: row.arrival_icao,
     ticketPriceMinEur: row.ticket_price_min_eur,
-    ticketPriceMaxEur: row.ticket_price_max_eur,
-    cargoPriceMinEurPerKg: row.cargo_price_min_eur_per_kg,
-    cargoPriceMaxEurPerKg: row.cargo_price_max_eur_per_kg
+    ticketPriceMaxEur: row.ticket_price_max_eur
   }
 }
 
@@ -54,25 +50,14 @@ export function upsertRoutePrice(input: RoutePriceInput): RoutePrice {
   getDb()
     .prepare(
       `INSERT INTO route_prices
-        (company_id, departure_icao, arrival_icao, ticket_price_min_eur, ticket_price_max_eur,
-         cargo_price_min_eur_per_kg, cargo_price_max_eur_per_kg, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        (company_id, departure_icao, arrival_icao, ticket_price_min_eur, ticket_price_max_eur, updated_at)
+       VALUES (?, ?, ?, ?, ?, datetime('now'))
        ON CONFLICT(company_id, departure_icao, arrival_icao) DO UPDATE SET
          ticket_price_min_eur = excluded.ticket_price_min_eur,
          ticket_price_max_eur = excluded.ticket_price_max_eur,
-         cargo_price_min_eur_per_kg = excluded.cargo_price_min_eur_per_kg,
-         cargo_price_max_eur_per_kg = excluded.cargo_price_max_eur_per_kg,
          updated_at = datetime('now')`
     )
-    .run(
-      input.companyId,
-      departureIcao,
-      arrivalIcao,
-      input.ticketPriceMinEur,
-      input.ticketPriceMaxEur,
-      input.cargoPriceMinEurPerKg,
-      input.cargoPriceMaxEurPerKg
-    )
+    .run(input.companyId, departureIcao, arrivalIcao, input.ticketPriceMinEur, input.ticketPriceMaxEur)
 
   return getRoutePrice(input.companyId, departureIcao, arrivalIcao)!
 }
@@ -84,12 +69,11 @@ export function deleteRoutePrice(id: number): void {
 interface FlightEconomyRow {
   flight_id: number
   ticket_price_eur: number
-  cargo_price_eur_per_kg: number
   reference_ticket_price_eur: number
-  reference_cargo_price_eur_per_kg: number
   cabin_revenue_multiplier: number
+  baggage_price_eur: number
   passengers_sold: number | null
-  cargo_kg_sold: number | null
+  checked_bags_sold: number | null
   revenue_eur: number | null
 }
 
@@ -97,42 +81,43 @@ function mapFlightEconomy(row: FlightEconomyRow): FlightEconomy {
   return {
     flightId: row.flight_id,
     ticketPriceEur: row.ticket_price_eur,
-    cargoPriceEurPerKg: row.cargo_price_eur_per_kg,
     referenceTicketPriceEur: row.reference_ticket_price_eur,
-    referenceCargoPriceEurPerKg: row.reference_cargo_price_eur_per_kg,
     cabinRevenueMultiplier: row.cabin_revenue_multiplier,
+    baggagePriceEur: row.baggage_price_eur,
     passengersSold: row.passengers_sold,
-    cargoKgSold: row.cargo_kg_sold,
+    checkedBagsSold: row.checked_bags_sold,
     revenueEur: row.revenue_eur
   }
 }
 
-/** Crée l'enregistrement économie d'un vol, une fois le nombre réel de passagers/fret connu (lu
- * depuis l'OFP SimBrief importé) — jamais au moment de la réservation, où seule la demande
- * *attendue* est connue (voir resolveFlightEconomy, injectée dans l'URL SimBrief pax/cargo). */
+/** Crée l'enregistrement économie d'un vol, une fois le nombre réel de passagers connu (lu depuis
+ * l'OFP SimBrief importé) — jamais au moment de la réservation, où seule la demande *attendue* est
+ * connue (voir resolveFlightEconomy, injectée dans l'URL SimBrief pax). Le nombre de bagages en
+ * soute est tiré au hasard ici, une fois ce nombre réel de passagers disponible (voir
+ * resolveCheckedBagsSold) — le prix du bagage est fixé par la compagnie, pas de fourchette. */
 export function createFlightEconomy(input: FlightEconomyInput): void {
+  const checkedBagsSold = input.passengersSold !== null ? resolveCheckedBagsSold(input.passengersSold) : null
   const revenueEur =
-    input.passengersSold !== null && input.cargoKgSold !== null
+    input.passengersSold !== null
       ? input.passengersSold * input.ticketPriceEur * input.cabinRevenueMultiplier +
-        input.cargoKgSold * input.cargoPriceEurPerKg
+        (checkedBagsSold ?? 0) * input.baggagePriceEur
       : null
 
   getDb()
     .prepare(
       `INSERT INTO flight_economy
-        (flight_id, ticket_price_eur, cargo_price_eur_per_kg, reference_ticket_price_eur,
-         reference_cargo_price_eur_per_kg, cabin_revenue_multiplier, passengers_sold, cargo_kg_sold, revenue_eur)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        (flight_id, ticket_price_eur, reference_ticket_price_eur, cabin_revenue_multiplier,
+         baggage_price_eur, passengers_sold, checked_bags_sold, revenue_eur)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       input.flightId,
       input.ticketPriceEur,
-      input.cargoPriceEurPerKg,
       input.referenceTicketPriceEur,
-      input.referenceCargoPriceEurPerKg,
       input.cabinRevenueMultiplier,
+      input.baggagePriceEur,
       input.passengersSold,
-      input.cargoKgSold,
+      checkedBagsSold,
       revenueEur
     )
 }

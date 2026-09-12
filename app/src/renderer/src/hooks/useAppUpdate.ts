@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import type { AppUpdateStatus, ReleaseChangelog } from '@shared/types/appUpdate'
+import type { AppUpdateStatus } from '@shared/types/appUpdate'
 
 /** État courant de la mise à jour, poussé par le processus main (voir appUpdater.ts) — partagé
  * entre les paramètres et la barre latérale pour éviter deux abonnements indépendants. */
@@ -13,12 +12,4 @@ export function useAppUpdateStatus(): AppUpdateStatus | null {
   }, [])
 
   return status
-}
-
-export function useReleaseChangelog(enabled: boolean) {
-  return useQuery<ReleaseChangelog>({
-    queryKey: ['updates', 'changelog'],
-    queryFn: () => window.flightops.updates.getChangelog(),
-    enabled
-  })
 }
