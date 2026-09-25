@@ -13,3 +13,6 @@ db-recovery/
 *.db
 *.db-shm
 *.db-wal
+
+# Annonces cabine brutes (888 Mo, WAV) : seules les versions compressées de app/resources/cabin-announcements sont versionnées
+/SRC/

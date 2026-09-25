@@ -11,11 +11,10 @@ import type { PirepApproachProfilePoint, PirepFlightPathPoint, PirepTelemetrySam
 import type { FlightRecorderStatus, SimConnectStatus, SimTelemetry } from '../types/simconnect'
 import type { StatisticsOverview } from '../types/statistics'
 import type { FlightEvent } from '../flightStatus/evaluateFlightEvents'
-import type { CabinAnnouncementFile, CabinAnnouncementType } from '../types/cabinAnnouncements'
+import type { CabinAnnouncementFile, CabinAnnouncementType, CabinAnnouncementVariant } from '../types/cabinAnnouncements'
 import type { TabletCabinCommand, TabletCabinStatus, TabletServerInfo } from '../types/tablet'
 import type { AppUpdateStatus } from '../types/appUpdate'
 import type { GsxCostStats, GsxReceipt } from '../types/gsxReceipt'
-import type { CompanyEconomySummary, FlightEconomy, RoutePrice, RoutePriceInput } from '../types/economy'
 
 export interface FlightopsApi {
   home: {
@@ -96,9 +95,13 @@ export interface FlightopsApi {
   }
   cabinAnnouncements: {
     list: (companyId: number) => Promise<CabinAnnouncementFile[]>
-    import: (companyId: number, type: CabinAnnouncementType) => Promise<CabinAnnouncementFile | null>
-    remove: (companyId: number, type: CabinAnnouncementType) => Promise<void>
-    setVolume: (companyId: number, type: CabinAnnouncementType, volume: number) => Promise<CabinAnnouncementFile>
+    import: (
+      companyId: number,
+      type: CabinAnnouncementType,
+      variant: CabinAnnouncementVariant
+    ) => Promise<CabinAnnouncementFile | null>
+    remove: (fileId: number) => Promise<void>
+    setVolume: (fileId: number, volume: number) => Promise<CabinAnnouncementFile>
   }
   tablet: {
     getServerInfo: () => Promise<TabletServerInfo>
@@ -120,21 +123,5 @@ export interface FlightopsApi {
     readReceiptHtml: (htmlPath: string) => Promise<string | null>
     getCostStatsForAircraft: (aircraftId: number) => Promise<GsxCostStats>
     excludeReceipt: (receiptId: string) => Promise<void>
-  }
-  economy: {
-    listRoutePrices: (companyId: number) => Promise<RoutePrice[]>
-    getRoutePrice: (companyId: number, departureIcao: string, arrivalIcao: string) => Promise<RoutePrice | null>
-    upsertRoutePrice: (input: RoutePriceInput) => Promise<RoutePrice>
-    deleteRoutePrice: (id: number) => Promise<void>
-    getRouteGsxCostHint: (
-      companyId: number,
-      departureIcao: string,
-      arrivalIcao: string
-    ) => Promise<{ averageGsxCostEur: number | null; flightsFlown: number }>
-    getFlightEconomy: (flightId: number) => Promise<FlightEconomy | null>
-    getCompanyEconomySummary: (companyId: number) => Promise<CompanyEconomySummary>
-    getAircraftEconomySummary: (aircraftId: number) => Promise<CompanyEconomySummary>
-    getAirportSurcharge: (companyId: number, departureIcao: string) => Promise<number>
-    getRouteSurcharge: (companyId: number, departureIcao: string, arrivalIcao: string) => Promise<number>
   }
 }

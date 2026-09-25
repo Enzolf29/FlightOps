@@ -4,8 +4,11 @@ import { CompanyPicker } from './CompanyPicker'
 import { CompanyLogo } from './CompanyLogo'
 import {
   CABIN_ANNOUNCEMENT_DEFINITIONS,
+  CABIN_ANNOUNCEMENT_VARIANTS,
+  CABIN_ANNOUNCEMENT_VARIANT_LABEL,
   type CabinAnnouncementFile,
-  type CabinAnnouncementType
+  type CabinAnnouncementType,
+  type CabinAnnouncementVariant
 } from '@shared/types/cabinAnnouncements'
 
 export function CabinAnnouncementsSettings() {
@@ -15,9 +18,10 @@ export function CabinAnnouncementsSettings() {
     queryFn: () => window.flightops.fleet.companies.list()
   })
   const [companyId, setCompanyId] = useState<number | null>(null)
-  const [previewType, setPreviewType] = useState<CabinAnnouncementType | null>(null)
+  const [previewFileId, setPreviewFileId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [draftVolumes, setDraftVolumes] = useState<Partial<Record<CabinAnnouncementType, number>>>({})
+  const [draftVolumes, setDraftVolumes] = useState<Record<number, number>>({})
+  const [newVariants, setNewVariants] = useState<Partial<Record<CabinAnnouncementType, CabinAnnouncementVariant>>>({})
   const previewRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
@@ -29,15 +33,17 @@ export function CabinAnnouncementsSettings() {
     queryFn: () => window.flightops.cabinAnnouncements.list(companyId!),
     enabled: companyId !== null
   })
-  const filesByType = new Map(files.map((file) => [file.type, file]))
+  const filesByType = new Map<CabinAnnouncementType, CabinAnnouncementFile[]>()
+  for (const file of files) filesByType.set(file.type, [...(filesByType.get(file.type) ?? []), file])
+  const configuredTypeCount = filesByType.size
 
   useEffect(() => {
-    setDraftVolumes(Object.fromEntries(files.map((file) => [file.type, Math.round(file.volume * 100)])))
+    setDraftVolumes(Object.fromEntries(files.map((file) => [file.id, Math.round(file.volume * 100)])))
   }, [files])
 
   const importMutation = useMutation({
-    mutationFn: ({ selectedCompanyId, type }: { selectedCompanyId: number; type: CabinAnnouncementType }) =>
-      window.flightops.cabinAnnouncements.import(selectedCompanyId, type),
+    mutationFn: ({ selectedCompanyId, type, variant }: { selectedCompanyId: number; type: CabinAnnouncementType; variant: CabinAnnouncementVariant }) =>
+      window.flightops.cabinAnnouncements.import(selectedCompanyId, type, variant),
     onSuccess: () => {
       setError(null)
       queryClient.invalidateQueries({ queryKey: ['cabin-announcements', companyId] })
@@ -45,19 +51,18 @@ export function CabinAnnouncementsSettings() {
     onError: (reason) => setError(reason instanceof Error ? reason.message : 'Import impossible.')
   })
   const removeMutation = useMutation({
-    mutationFn: ({ selectedCompanyId, type }: { selectedCompanyId: number; type: CabinAnnouncementType }) =>
-      window.flightops.cabinAnnouncements.remove(selectedCompanyId, type),
+    mutationFn: (fileId: number) => window.flightops.cabinAnnouncements.remove(fileId),
     onSuccess: () => {
       stopPreview()
       queryClient.invalidateQueries({ queryKey: ['cabin-announcements', companyId] })
     }
   })
   const volumeMutation = useMutation({
-    mutationFn: ({ selectedCompanyId, type, volume }: { selectedCompanyId: number; type: CabinAnnouncementType; volume: number }) =>
-      window.flightops.cabinAnnouncements.setVolume(selectedCompanyId, type, volume / 100),
+    mutationFn: ({ fileId, volume }: { fileId: number; volume: number }) =>
+      window.flightops.cabinAnnouncements.setVolume(fileId, volume / 100),
     onSuccess: (updated) => {
       queryClient.setQueryData<CabinAnnouncementFile[]>(['cabin-announcements', updated.companyId], (current = []) =>
-        current.map((file) => file.type === updated.type ? updated : file)
+        current.map((file) => file.id === updated.id ? updated : file)
       )
       setError(null)
     },
@@ -67,19 +72,19 @@ export function CabinAnnouncementsSettings() {
   function stopPreview() {
     previewRef.current?.pause()
     previewRef.current = null
-    setPreviewType(null)
+    setPreviewFileId(null)
   }
 
   function togglePreview(file: CabinAnnouncementFile) {
-    if (previewType === file.type) {
+    if (previewFileId === file.id) {
       stopPreview()
       return
     }
     stopPreview()
     const audio = new Audio(file.audioUrl)
-    audio.volume = (draftVolumes[file.type] ?? Math.round(file.volume * 100)) / 100
+    audio.volume = (draftVolumes[file.id] ?? Math.round(file.volume * 100)) / 100
     previewRef.current = audio
-    setPreviewType(file.type)
+    setPreviewFileId(file.id)
     audio.onended = stopPreview
     audio.onerror = stopPreview
     audio.play().catch(() => {
@@ -88,9 +93,11 @@ export function CabinAnnouncementsSettings() {
     })
   }
 
-  function commitVolume(type: CabinAnnouncementType) {
-    if (companyId === null || !filesByType.has(type)) return
-    volumeMutation.mutate({ selectedCompanyId: companyId, type, volume: draftVolumes[type] ?? 100 })
+  function commitVolume(fileId: number) {
+    const stored = files.find((file) => file.id === fileId)
+    const draft = draftVolumes[fileId]
+    if (!stored || draft === undefined || draft === Math.round(stored.volume * 100)) return
+    volumeMutation.mutate({ fileId, volume: draft })
   }
 
   const selectedCompany = companies.find((company) => company.id === companyId) ?? null
@@ -104,7 +111,9 @@ export function CabinAnnouncementsSettings() {
           <h2>Annonces cabine personnalisées</h2>
           <p>
             Chaque fichier est copié dans les données locales de FlightOps. MP3, WAV, OGG, M4A et AAC sont acceptés.
-            Le vol doit être démarré dans le suivi pour que FlightOps choisisse automatiquement sa compagnie.
+            Une annonce peut avoir plusieurs fichiers : l’un d’eux est tiré au hasard à chaque lecture, en tenant
+            compte du jour ou de la nuit dans le simulateur. Les annonces de base de chaque compagnie sont modifiables
+            comme les vôtres. Le vol doit être démarré dans le suivi pour que FlightOps choisisse automatiquement sa compagnie.
           </p>
         </div>
         <span className="cabin-local-badge">Stockage local uniquement</span>
@@ -127,67 +136,88 @@ export function CabinAnnouncementsSettings() {
             />
             <div>
               <h2>{selectedCompany.displayName}</h2>
-              <p>{files.length} annonce{files.length === 1 ? '' : 's'} configurée{files.length === 1 ? '' : 's'} sur {CABIN_ANNOUNCEMENT_DEFINITIONS.length}</p>
+              <p>
+                {configuredTypeCount} annonce{configuredTypeCount === 1 ? '' : 's'} configurée{configuredTypeCount === 1 ? '' : 's'} sur{' '}
+                {CABIN_ANNOUNCEMENT_DEFINITIONS.length} · {files.length} fichier{files.length === 1 ? '' : 's'}
+              </p>
             </div>
           </div>
           {error ? <p className="form-error">{error}</p> : null}
           {filesLoading ? <p className="empty-hint">Chargement…</p> : (
             <div className="cabin-announcement-list">
               {CABIN_ANNOUNCEMENT_DEFINITIONS.map((definition) => {
-                const file = filesByType.get(definition.type)
+                const typeFiles = filesByType.get(definition.type) ?? []
+                const variant = newVariants[definition.type] ?? 'any'
                 const importing = importMutation.isPending && importMutation.variables?.type === definition.type
                 return (
-                  <div className={'cabin-announcement-row' + (file ? ' cabin-announcement-row--ready' : '')} key={definition.type}>
+                  <div className={'cabin-announcement-row' + (typeFiles.length > 0 ? ' cabin-announcement-row--ready' : '')} key={definition.type}>
                     <span className="cabin-announcement-icon" aria-hidden="true">{definition.icon}</span>
                     <div className="cabin-announcement-copy">
                       <strong>{definition.label}</strong>
                       <span>{definition.trigger}</span>
-                      <small>{file?.originalFilename ?? 'Aucun fichier importé'}</small>
+                      {typeFiles.length === 0 ? <small>Aucun fichier</small> : null}
                     </div>
-                    <label className={'cabin-volume' + (file ? '' : ' cabin-volume--disabled')}>
-                      <span>Volume</span>
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        step="1"
-                        value={draftVolumes[definition.type] ?? 100}
-                        disabled={!file}
-                        aria-label={`Volume de ${definition.label}`}
-                        onChange={(event) => setDraftVolumes((current) => ({
-                          ...current,
-                          [definition.type]: Number(event.target.value)
-                        }))}
-                        onPointerUp={() => commitVolume(definition.type)}
-                        onKeyUp={() => commitVolume(definition.type)}
-                        onBlur={() => commitVolume(definition.type)}
-                      />
-                      <strong>{draftVolumes[definition.type] ?? 100}%</strong>
-                    </label>
+
+                    {typeFiles.length > 0 ? (
+                      <div className="cabin-file-list">
+                        {typeFiles.map((file) => (
+                          <div className="cabin-file" key={file.id}>
+                            <span className={`cabin-variant-badge cabin-variant-badge--${file.variant}`}>
+                              {CABIN_ANNOUNCEMENT_VARIANT_LABEL[file.variant]}
+                            </span>
+                            <span className="cabin-file-name" title={file.originalFilename}>{file.originalFilename}</span>
+                            <label className="cabin-volume cabin-volume--inline">
+                              <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                step="1"
+                                value={draftVolumes[file.id] ?? Math.round(file.volume * 100)}
+                                aria-label={`Volume de ${definition.label} (${file.originalFilename})`}
+                                onChange={(event) => setDraftVolumes((current) => ({ ...current, [file.id]: Number(event.target.value) }))}
+                                onPointerUp={() => commitVolume(file.id)}
+                                onKeyUp={() => commitVolume(file.id)}
+                                onBlur={() => commitVolume(file.id)}
+                              />
+                              <strong>{draftVolumes[file.id] ?? Math.round(file.volume * 100)}%</strong>
+                            </label>
+                            <button type="button" onClick={() => togglePreview(file)}>
+                              {previewFileId === file.id ? 'Arrêter' : 'Écouter'}
+                            </button>
+                            <button
+                              type="button"
+                              className="danger-ghost"
+                              disabled={removeMutation.isPending}
+                              onClick={() => removeMutation.mutate(file.id)}
+                            >
+                              Supprimer
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+
                     <div className="cabin-announcement-actions">
-                      {file ? (
-                        <button type="button" onClick={() => togglePreview(file)}>
-                          {previewType === definition.type ? 'Arrêter' : 'Écouter'}
-                        </button>
-                      ) : null}
+                      <select
+                        value={variant}
+                        aria-label={`Période du nouveau fichier pour ${definition.label}`}
+                        onChange={(event) => setNewVariants((current) => ({
+                          ...current,
+                          [definition.type]: event.target.value as CabinAnnouncementVariant
+                        }))}
+                      >
+                        {CABIN_ANNOUNCEMENT_VARIANTS.map((option) => (
+                          <option key={option} value={option}>{CABIN_ANNOUNCEMENT_VARIANT_LABEL[option]}</option>
+                        ))}
+                      </select>
                       <button
                         type="button"
-                        className={file ? '' : 'primary'}
+                        className={typeFiles.length === 0 ? 'primary' : ''}
                         disabled={importMutation.isPending}
-                        onClick={() => companyId !== null && importMutation.mutate({ selectedCompanyId: companyId, type: definition.type })}
+                        onClick={() => companyId !== null && importMutation.mutate({ selectedCompanyId: companyId, type: definition.type, variant })}
                       >
-                        {importing ? 'Import…' : file ? 'Remplacer' : 'Importer'}
+                        {importing ? 'Import…' : 'Ajouter un fichier'}
                       </button>
-                      {file ? (
-                        <button
-                          type="button"
-                          className="danger-ghost"
-                          disabled={removeMutation.isPending}
-                          onClick={() => companyId !== null && removeMutation.mutate({ selectedCompanyId: companyId, type: definition.type })}
-                        >
-                          Supprimer
-                        </button>
-                      ) : null}
                     </div>
                   </div>
                 )

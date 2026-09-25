@@ -5,9 +5,6 @@ import { useFetchLatestOfp } from '@renderer/hooks/useSimbrief'
 import { OfpImportPreview } from '@renderer/components/OfpImportPreview'
 import { CompanyPicker } from '@renderer/components/CompanyPicker'
 import { RealFlightsBrowser } from '@renderer/components/RealFlightsBrowser'
-import { EconomyBookingPanel } from '@renderer/components/EconomyBookingPanel'
-import { useEconomyBookingStore } from '@renderer/stores/economyBookingStore'
-import type { BookingEconomyResolution } from '@renderer/economy/resolveBookingEconomy'
 import { buildDispatchPrefillUrl } from '@shared/simbrief/buildDispatchPrefillUrl'
 import { generateCallsign } from '@shared/callsign/generateCallsign'
 import { getDefaultDepartureUtc } from '@shared/booking/getDefaultDepartureUtc'
@@ -110,7 +107,6 @@ function CreateTab({ onGenerated }: { onGenerated: () => void }) {
   const [date, setDate] = useState(defaultDeparture.date)
   const [time, setTime] = useState(defaultDeparture.time)
   const [error, setError] = useState<string | null>(null)
-  const [economyResolution, setEconomyResolution] = useState<BookingEconomyResolution | null>(null)
 
   const { data: aircraft } = useAircraft(companyId ?? undefined)
   const selectedCompany = companies?.find((company) => company.id === companyId) ?? null
@@ -146,14 +142,6 @@ function CreateTab({ onGenerated }: { onGenerated: () => void }) {
     })
 
     setError(null)
-    if (economyResolution) {
-      useEconomyBookingStore.getState().setPending({
-        companyId: selectedCompany.id,
-        departureIcao: departureIcao.trim().toUpperCase(),
-        arrivalIcao: arrivalIcao.trim().toUpperCase(),
-        economy: economyResolution.economyInput
-      })
-    }
     const url = buildDispatchPrefillUrl({
       originIcao: departureIcao.trim().toUpperCase(),
       destIcao: arrivalIcao.trim().toUpperCase(),
@@ -163,8 +151,7 @@ function CreateTab({ onGenerated }: { onGenerated: () => void }) {
       registration: selectedAircraft.registration,
       simbriefFin: selectedAircraft.simbriefFin,
       callsign,
-      scheduledDeparture,
-      paxCount: economyResolution?.expectedPassengers
+      scheduledDeparture
     })
 
     window.flightops.app.openExternal(url)
@@ -252,15 +239,6 @@ function CreateTab({ onGenerated }: { onGenerated: () => void }) {
           }}
         />
       </label>
-
-      <EconomyBookingPanel
-        companyId={selectedCompany?.id ?? null}
-        pricingTier={selectedCompany?.pricingTier ?? null}
-        departureIcao={departureIcao}
-        arrivalIcao={arrivalIcao}
-        seatCapacity={selectedAircraft?.seatCapacity ?? null}
-        onResolutionChange={setEconomyResolution}
-      />
 
       {error ? <p className="form-error">{error}</p> : null}
 

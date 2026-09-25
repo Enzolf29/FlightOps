@@ -95,6 +95,9 @@ export function buildLoadsheetComparison(
     row('cargo', 'FRET', 'load', kg(loadsheet.cargo), null, null, 'kg', 'simulator'),
     row('payload', 'CHARGE UTILE', 'load', plannedPayload, payload, null, 'kg', 'calculated'),
     row('zfw', 'ZERO FUEL WEIGHT', 'load', kg(loadsheet.estZfw), zeroFuel, usable(snapshot?.maxZeroFuelWeightKg) ?? kg(loadsheet.maxZfw), 'kg', 'calculated'),
+    // Pas de valeur planifiée : l'OFP SimBrief ne publie aucune donnée %MAC, seul MSFS (CG PERCENT)
+    // fournit une position réelle du centre de gravité une fois le chargement final capturé.
+    row('macZfw', 'MACZFW', 'load', null, snapshot?.macZfwPercent ?? null, null, 'percent', 'simulator'),
     row('ramp', 'RAMP WEIGHT', 'load', kg(loadsheet.estRamp), total, usable(snapshot?.maxGrossWeightKg), 'kg', 'simulator'),
     row('tow', 'TAKEOFF WEIGHT', 'load', kg(loadsheet.estTow), takeoffWeight, usable(snapshot?.maxTakeoffWeightKg) ?? kg(loadsheet.maxTow), 'kg', 'calculated'),
     row('ldw', 'LANDING WEIGHT', 'load', kg(loadsheet.estLdw), null, usable(snapshot?.maxLandingWeightKg) ?? kg(loadsheet.maxLdw), 'kg', 'simulator'),

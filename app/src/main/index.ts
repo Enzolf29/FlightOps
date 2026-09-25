@@ -27,6 +27,7 @@ import { registerStatsHandlers } from './ipc/registerStatsHandlers'
 import { flushFlightRecorder } from './simconnect/flightStatusDetector'
 import { startFlightStatusScheduler, stopFlightStatusScheduler } from './flightStatusScheduler'
 import { registerCabinAnnouncementHandlers } from './ipc/registerCabinAnnouncementHandlers'
+import { seedBundledCabinAnnouncements } from './cabinAnnouncements/seedBundledAnnouncements'
 import {
   registerCabinAnnouncementProtocol,
   registerCabinAnnouncementScheme
@@ -37,7 +38,6 @@ import { getTabletServerInfo, startTabletServer, stopTabletServer } from './tabl
 import { registerUpdateHandlers } from './ipc/registerUpdateHandlers'
 import { startAppUpdater, stopAppUpdater } from './updater/appUpdater'
 import { registerGsxHandlers } from './ipc/registerGsxHandlers'
-import { registerEconomyHandlers } from './ipc/registerEconomyHandlers'
 
 registerCabinAnnouncementScheme()
 registerSimbriefPdfScheme()
@@ -50,6 +50,7 @@ app.whenReady().then(() => {
   })
 
   getDb()
+  seedBundledCabinAnnouncements()
   registerCabinAnnouncementProtocol()
   registerSimbriefPdfProtocol()
   startFlightStatusScheduler()
@@ -71,7 +72,6 @@ app.whenReady().then(() => {
   registerTabletHandlers()
   registerUpdateHandlers()
   registerGsxHandlers()
-  registerEconomyHandlers()
   startAppUpdater()
 
   void startTabletServer()

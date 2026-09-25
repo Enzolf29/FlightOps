@@ -295,25 +295,6 @@ describe('evaluateFlightEvents', () => {
     expect(events.find((e) => e.type === 'ground_overspeed')).toBeUndefined()
   })
 
-  it('flags excessive bank angle once on crossing the threshold, not on every tick', () => {
-    const previous = telemetry({ bankDegrees: 10 })
-    const current = telemetry({ bankDegrees: 35 })
-    const first = evaluateFlightEvents(previous, current, INITIAL_FLIGHT_EVENT_FLAGS)
-    expect(first.events).toContainEqual(expect.objectContaining({ type: 'bank_angle' }))
-
-    const second = evaluateFlightEvents(current, telemetry({ bankDegrees: 36 }), first.nextFlags)
-    expect(second.events.find((e) => e.type === 'bank_angle')).toBeUndefined()
-  })
-
-  it('re-arms the bank angle warning after returning under the threshold', () => {
-    const steep = telemetry({ bankDegrees: 35 })
-    const { nextFlags } = evaluateFlightEvents(telemetry({ bankDegrees: 10 }), steep, INITIAL_FLIGHT_EVENT_FLAGS)
-    const level = telemetry({ bankDegrees: 5 })
-    const { nextFlags: levelFlags } = evaluateFlightEvents(steep, level, nextFlags)
-    const { events } = evaluateFlightEvents(level, telemetry({ bankDegrees: 33 }), levelFlags)
-    expect(events).toContainEqual(expect.objectContaining({ type: 'bank_angle' }))
-  })
-
   it('detects engine start and stop for a single engine', () => {
     const start = evaluateFlightEvents(
       telemetry({ engine1Running: false, enginesRunning: false }),

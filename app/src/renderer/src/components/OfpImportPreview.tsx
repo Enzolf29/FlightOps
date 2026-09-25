@@ -5,8 +5,6 @@ import type { AircraftWithStats } from '@shared/types/aircraft'
 import type { FlightWithRelations, FlightSource } from '@shared/types/flight'
 import { useAircraft } from '@renderer/hooks/useAircraft'
 import { useCreateBookingFromOfp } from '@renderer/hooks/useBooking'
-import { useRoutePrice } from '@renderer/hooks/useEconomy'
-import { useEconomyBookingStore } from '@renderer/stores/economyBookingStore'
 import { CompanyLogo } from '@renderer/components/CompanyLogo'
 import { getAirportLabel } from '@shared/airports/airportNames'
 import { formatDateTime } from '@renderer/lib/format'
@@ -77,32 +75,9 @@ export function OfpImportPreview({ ofp, companies, source, onCreated }: OfpImpor
     return resolveImport(ofp, companies, allAircraft)
   }, [ofp, companies, allAircraft])
 
-  // Avertit si cette ligne est tarifiée (mode économie) mais qu'aucune résolution en attente n'y
-  // correspond — sans ça, l'import se fait silencieusement sans mode économie et l'oubli ne se
-  // découvre qu'au PIREP, une fois le vol déjà terminé.
-  const resolvedCompanyId = resolution?.ok ? resolution.data.company.id : null
-  const { data: routePriceForImport } = useRoutePrice(
-    resolvedCompanyId,
-    ofp.departureIcao,
-    ofp.arrivalIcao,
-    resolvedCompanyId !== null
-  )
-  const pendingEconomy = useEconomyBookingStore((state) => state.pending)
-  const pendingEconomyMatches = Boolean(
-    pendingEconomy &&
-      resolvedCompanyId !== null &&
-      pendingEconomy.companyId === resolvedCompanyId &&
-      pendingEconomy.departureIcao === ofp.departureIcao.trim().toUpperCase() &&
-      pendingEconomy.arrivalIcao === ofp.arrivalIcao.trim().toUpperCase()
-  )
-  const showEconomyMismatchWarning = Boolean(routePriceForImport) && !pendingEconomyMatches
-
   function handleImport() {
     if (!resolution?.ok) return
     const trimmedAlternate = alternateIcao.trim().toUpperCase()
-    const economy = useEconomyBookingStore
-      .getState()
-      .consumeIfMatches(resolution.data.company.id, ofp.departureIcao, ofp.arrivalIcao)
     createMutation
       .mutateAsync({
         companyId: resolution.data.company.id,
@@ -116,8 +91,7 @@ export function OfpImportPreview({ ofp, companies, source, onCreated }: OfpImpor
         scheduledArrivalUtc: ofp.scheduledArrivalUtc,
         route: ofp.route,
         simbriefOfpJson: ofp.rawJson,
-        source,
-        economy
+        source
       })
       .then((flight) => onCreated(flight))
   }
@@ -189,14 +163,6 @@ export function OfpImportPreview({ ofp, companies, source, onCreated }: OfpImpor
               </div>
             </div>
           </div>
-
-          {showEconomyMismatchWarning ? (
-            <p className="form-warning">
-              Cette ligne est tarifiée (mode économie) mais aucune résolution en attente ne lui correspond — ce vol sera
-              importé sans mode économie. Repassez par « Créer un plan » ou « Vols réels » pour ce trajet si vous
-              vouliez l'appliquer.
-            </p>
-          ) : null}
 
           <div className="form-actions">
             <button type="button" className="primary" onClick={handleImport} disabled={createMutation.isPending}>

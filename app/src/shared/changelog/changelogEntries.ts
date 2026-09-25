@@ -12,6 +12,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
   {
+    version: '1.0.29',
+    changes: [
+      'Suppression complète du mode économie (tarifs, passagers et fret calculés par l’application, bénéfice, capacités des avions) : SimBrief gère désormais les charges. Les factures GSX sont conservées à titre indicatif dans le suivi de vol, les PIREPs et les statistiques',
+      'Statistiques : nouvelles cartes « Distance parcourue » (avec l’équivalent en tours de la Terre) et « Carburant consommé » (réellement brûlé, hors carburant non utilisé)',
+      'Statistiques : nombre d’heures et distance ajoutés pour chaque compagnie et chaque avion, en plus du nombre de vols',
+      'Loadsheet (application et tablette) : ajout du MACZFW en %',
+      'Nouvelle application « GSX » sur la tablette EFB : statut en direct de tous les services GSX (embarquement, débarquement, carburant, pushback, catering, etc.) et contrôle du menu GSX',
+      'Annonces cabine de base incluses dans l’application, par compagnie, toujours modifiables : le joueur peut les supprimer, en ajouter ou les remplacer',
+      'Annonces cabine : plusieurs fichiers possibles pour une même annonce (un est choisi au hasard à la lecture) et variantes jour / nuit selon l’heure du simulateur',
+      'Suppression de l’alerte « Inclinaison excessive » (plus de 30°) dans les journaux de vol'
+    ]
+  },
+  {
     version: '1.0.28',
     changes: [
       'Correction du mode économie : le prix résolu à la réservation survit désormais à un redémarrage de l’application avant l’import du plan SimBrief',

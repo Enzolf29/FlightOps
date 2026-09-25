@@ -41,14 +41,31 @@ export const CABIN_ANNOUNCEMENT_DEFINITIONS: CabinAnnouncementDefinition[] = [
   { type: 'disembark_started', label: 'Disembark Started', trigger: 'À la coupure du dernier moteur après l’atterrissage', icon: '🚪' }
 ]
 
+/** Période de la journée à laquelle un fichier est destiné : 'any' = toujours, sinon selon l'heure du sim. */
+export const CABIN_ANNOUNCEMENT_VARIANTS = ['any', 'day', 'night'] as const
+export type CabinAnnouncementVariant = (typeof CABIN_ANNOUNCEMENT_VARIANTS)[number]
+
+export const CABIN_ANNOUNCEMENT_VARIANT_LABEL: Record<CabinAnnouncementVariant, string> = {
+  any: 'Toujours',
+  day: 'Jour',
+  night: 'Nuit'
+}
+
 export interface CabinAnnouncementFile {
+  /** Identifiant du fichier : un même type d'annonce peut en avoir plusieurs, tirés au hasard à la lecture. */
+  id: number
   companyId: number
   type: CabinAnnouncementType
+  variant: CabinAnnouncementVariant
   originalFilename: string
   updatedAt: string
   audioUrl: string
   /** Volume propre à ce fichier, de 0 (muet) à 1 (100 %). */
   volume: number
+}
+
+export function isCabinAnnouncementVariant(value: string): value is CabinAnnouncementVariant {
+  return (CABIN_ANNOUNCEMENT_VARIANTS as readonly string[]).includes(value)
 }
 
 export function isCabinAnnouncementType(value: string): value is CabinAnnouncementType {

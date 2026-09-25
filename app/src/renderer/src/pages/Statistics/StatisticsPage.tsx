@@ -19,7 +19,14 @@ import { formatInTimeZone } from 'date-fns-tz'
 import { useStatistics } from '@renderer/hooks/useStatistics'
 import { StatGrid } from '@renderer/components/StatGrid'
 import { ArrowUpDownIcon, InfoIcon } from '@renderer/components/icons'
-import { formatEur, formatHours } from '@renderer/lib/format'
+import {
+  formatDistanceKm,
+  formatDistanceNm,
+  formatEarthLaps,
+  formatEur,
+  formatFuelKg,
+  formatHours
+} from '@renderer/lib/format'
 import { HARD_LANDING_VS_FPM } from '@shared/flightStatus/evaluateFlightEvents'
 import { formatDelayDuration } from '@shared/flightStatus/formatDelayDuration'
 import {
@@ -77,8 +84,16 @@ export function StatisticsPage() {
 
   const punctualityData = [
     { key: 'onTime', label: 'À l’heure', value: data.punctuality.onTime },
-    { key: 'delayed10to60', label: 'Retardé', value: data.punctuality.delayed10to60 },
-    { key: 'delayed60Plus', label: 'En retard', value: data.punctuality.delayed60Plus },
+    {
+      key: 'delayed10to60',
+      label: 'Retardé',
+      value: data.punctuality.delayed10to60
+    },
+    {
+      key: 'delayed60Plus',
+      label: 'En retard',
+      value: data.punctuality.delayed60Plus
+    },
     { key: 'cancelled', label: 'Annulé', value: data.punctuality.cancelled }
   ].filter((entry) => entry.value > 0)
 
@@ -88,18 +103,17 @@ export function StatisticsPage() {
   }))
 
   const landingCategoryData = data.landingRate.categoryBreakdown
-    .map((entry) => ({ key: entry.category, label: entry.label, value: entry.count }))
+    .map((entry) => ({
+      key: entry.category,
+      label: entry.label,
+      value: entry.count
+    }))
     .filter((entry) => entry.value > 0)
 
   const gsxCategoryData = data.gsxCosts.byCategory.map((entry) => ({
     key: entry.category,
     label: entry.label,
     value: Math.round(entry.totalEur * 100) / 100
-  }))
-
-  const profitByCompanyData = data.profit.byCompany.map((entry) => ({
-    companyIcao: entry.companyIcao,
-    profit: Math.round(entry.profitEur * 100) / 100
   }))
 
   return (
@@ -112,8 +126,28 @@ export function StatisticsPage() {
         <>
           <StatGrid
             items={[
-              { key: 'flights', label: 'Vols terminés', value: data.totalFlights },
-              { key: 'hours', label: 'Heures cumulées', value: formatHours(data.cumulativeHours) }
+              {
+                key: 'flights',
+                label: 'Vols terminés',
+                value: data.totalFlights
+              },
+              {
+                key: 'hours',
+                label: 'Heures cumulées',
+                value: formatHours(data.cumulativeHours)
+              },
+              {
+                key: 'distance',
+                label: 'Distance parcourue',
+                value: formatDistanceKm(data.totalDistanceNm),
+                detail: `${formatEarthLaps(data.totalDistanceNm)} · ${formatDistanceNm(data.totalDistanceNm)}`
+              },
+              {
+                key: 'fuel',
+                label: 'Carburant consommé',
+                value: formatFuelKg(data.totalFuelBurnedKg),
+                detail: 'Réellement brûlé, hors carburant non utilisé'
+              }
             ]}
           />
 
@@ -126,7 +160,12 @@ export function StatisticsPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
                     <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="var(--text-muted)" />
                     <YAxis tick={{ fontSize: 11 }} stroke="var(--text-muted)" width={40} />
-                    <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }} />
+                    <Tooltip
+                      contentStyle={{
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border-subtle)'
+                      }}
+                    />
                     <Bar dataKey="hours" name="Heures" fill="var(--accent)" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -143,28 +182,96 @@ export function StatisticsPage() {
                 <BarChart data={data.byCompany} layout="vertical" margin={{ top: 8, right: 20, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
                   <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="var(--text-muted)" />
-                  <YAxis dataKey="companyIcao" type="category" tick={{ fontSize: 12 }} stroke="var(--text-muted)" width={60} />
-                  <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }} />
+                  <YAxis
+                    dataKey="companyIcao"
+                    type="category"
+                    tick={{ fontSize: 12 }}
+                    stroke="var(--text-muted)"
+                    width={60}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border-subtle)'
+                    }}
+                  />
                   <Bar dataKey="count" name="Vols" fill="var(--accent)" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            <table className="stats-table">
+              <thead>
+                <tr>
+                  <th>Compagnie</th>
+                  <th>Vols</th>
+                  <th>Heures</th>
+                  <th>Distance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.byCompany.map((row) => (
+                  <tr key={row.companyIcao}>
+                    <td>{row.companyIcao}</td>
+                    <td>{row.count}</td>
+                    <td>{formatHours(row.hours)}</td>
+                    <td>{formatDistanceKm(row.distanceNm)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </section>
 
           <section className="home-section">
             <h2>Vols par avion</h2>
             {data.byAircraftType.length > 0 ? (
-              <div className="pirep-chart-wrapper">
-                <ResponsiveContainer width="100%" height={Math.max(180, data.byAircraftType.length * 36)}>
-                  <BarChart data={data.byAircraftType} layout="vertical" margin={{ top: 8, right: 20, bottom: 0, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="var(--text-muted)" />
-                    <YAxis dataKey="type" type="category" tick={{ fontSize: 12 }} stroke="var(--text-muted)" width={90} />
-                    <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }} />
-                    <Bar dataKey="count" name="Vols" fill="#2fb170" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <>
+                <div className="pirep-chart-wrapper">
+                  <ResponsiveContainer width="100%" height={Math.max(180, data.byAircraftType.length * 36)}>
+                    <BarChart
+                      data={data.byAircraftType}
+                      layout="vertical"
+                      margin={{ top: 8, right: 20, bottom: 0, left: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                      <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="var(--text-muted)" />
+                      <YAxis
+                        dataKey="type"
+                        type="category"
+                        tick={{ fontSize: 12 }}
+                        stroke="var(--text-muted)"
+                        width={90}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border-subtle)'
+                        }}
+                      />
+                      <Bar dataKey="count" name="Vols" fill="#2fb170" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <table className="stats-table">
+                  <thead>
+                    <tr>
+                      <th>Avion</th>
+                      <th>Vols</th>
+                      <th>Heures</th>
+                      <th>Distance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.byAircraftType.map((row) => (
+                      <tr key={row.type}>
+                        <td>{row.type}</td>
+                        <td>{row.count}</td>
+                        <td>{formatHours(row.hours)}</td>
+                        <td>{formatDistanceKm(row.distanceNm)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
             ) : (
               <p className="empty-hint">Aucune donnée pour l’instant.</p>
             )}
@@ -177,8 +284,19 @@ export function StatisticsPage() {
                 <BarChart data={routesData} layout="vertical" margin={{ top: 8, right: 20, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
                   <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="var(--text-muted)" />
-                  <YAxis dataKey="route" type="category" tick={{ fontSize: 11 }} stroke="var(--text-muted)" width={110} />
-                  <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }} />
+                  <YAxis
+                    dataKey="route"
+                    type="category"
+                    tick={{ fontSize: 11 }}
+                    stroke="var(--text-muted)"
+                    width={110}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border-subtle)'
+                    }}
+                  />
                   <Bar dataKey="count" name="Vols" fill="#e0a72c" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -220,13 +338,25 @@ export function StatisticsPage() {
               <div className="pirep-chart-wrapper">
                 <ResponsiveContainer width="100%" height={240}>
                   <PieChart>
-                    <Pie data={punctualityData} dataKey="value" nameKey="label" innerRadius={60} outerRadius={100} paddingAngle={2}>
+                    <Pie
+                      data={punctualityData}
+                      dataKey="value"
+                      nameKey="label"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={2}
+                    >
                       {punctualityData.map((entry) => (
                         <Cell key={entry.key} fill={PUNCTUALITY_COLORS[entry.key as keyof typeof PUNCTUALITY_COLORS]} />
                       ))}
                     </Pie>
                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }} />
+                    <Tooltip
+                      contentStyle={{
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border-subtle)'
+                      }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -247,19 +377,28 @@ export function StatisticsPage() {
                       {
                         key: 'average',
                         label: 'Atterrissage moyen',
-                        value: data.landingRate.averageFpm !== null ? `${Math.round(data.landingRate.averageFpm)} ft/min` : '—',
+                        value:
+                          data.landingRate.averageFpm !== null
+                            ? `${Math.round(data.landingRate.averageFpm)} ft/min`
+                            : '—',
                         icon: <ArrowUpDownIcon />
                       },
                       {
                         key: 'smoothest',
                         label: 'Atterrissage le plus doux',
-                        value: data.landingRate.smoothestFpm !== null ? `${Math.round(data.landingRate.smoothestFpm)} ft/min` : '—',
+                        value:
+                          data.landingRate.smoothestFpm !== null
+                            ? `${Math.round(data.landingRate.smoothestFpm)} ft/min`
+                            : '—',
                         icon: <ArrowUpDownIcon />
                       },
                       {
                         key: 'hardest',
                         label: 'Atterrissage le plus dur',
-                        value: data.landingRate.hardestFpm !== null ? `${Math.round(data.landingRate.hardestFpm)} ft/min` : '—',
+                        value:
+                          data.landingRate.hardestFpm !== null
+                            ? `${Math.round(data.landingRate.hardestFpm)} ft/min`
+                            : '—',
                         icon: <ArrowUpDownIcon />
                       }
                     ]}
@@ -282,7 +421,12 @@ export function StatisticsPage() {
                             ))}
                           </Pie>
                           <Legend wrapperStyle={{ fontSize: 12 }} />
-                          <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }} />
+                          <Tooltip
+                            contentStyle={{
+                              background: 'var(--bg-surface)',
+                              border: '1px solid var(--border-subtle)'
+                            }}
+                          />
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
@@ -296,9 +440,24 @@ export function StatisticsPage() {
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
                         <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="var(--text-muted)" />
                         <YAxis tick={{ fontSize: 11 }} stroke="var(--text-muted)" width={50} />
-                        <ReferenceLine y={HARD_LANDING_VS_FPM} stroke="var(--status-delayed-high)" strokeDasharray="4 4" />
-                        <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }} />
-                        <Line type="monotone" dataKey="fpm" name="Vitesse verticale moyenne (ft/min)" stroke="var(--accent)" dot />
+                        <ReferenceLine
+                          y={HARD_LANDING_VS_FPM}
+                          stroke="var(--status-delayed-high)"
+                          strokeDasharray="4 4"
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: 'var(--bg-surface)',
+                            border: '1px solid var(--border-subtle)'
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="fpm"
+                          name="Vitesse verticale moyenne (ft/min)"
+                          stroke="var(--accent)"
+                          dot
+                        />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -316,8 +475,16 @@ export function StatisticsPage() {
                 <StatGrid
                   compact
                   items={[
-                    { key: 'total', label: 'Total facturé', value: formatEur(data.gsxCosts.totalEur) },
-                    { key: 'flights', label: 'Vols avec données GSX', value: data.gsxCosts.flightsWithData },
+                    {
+                      key: 'total',
+                      label: 'Total facturé',
+                      value: formatEur(data.gsxCosts.totalEur)
+                    },
+                    {
+                      key: 'flights',
+                      label: 'Vols avec données GSX',
+                      value: data.gsxCosts.flightsWithData
+                    },
                     {
                       key: 'perFlight',
                       label: 'Coût moyen / vol',
@@ -329,7 +496,14 @@ export function StatisticsPage() {
                   <div className="pirep-chart-wrapper">
                     <ResponsiveContainer width="100%" height={240}>
                       <PieChart>
-                        <Pie data={gsxCategoryData} dataKey="value" nameKey="label" innerRadius={60} outerRadius={100} paddingAngle={2}>
+                        <Pie
+                          data={gsxCategoryData}
+                          dataKey="value"
+                          nameKey="label"
+                          innerRadius={60}
+                          outerRadius={100}
+                          paddingAngle={2}
+                        >
                           {gsxCategoryData.map((entry) => (
                             <Cell key={entry.key} fill={GSX_CATEGORY_COLORS[entry.key] ?? 'var(--accent)'} />
                           ))}
@@ -337,7 +511,10 @@ export function StatisticsPage() {
                         <Legend wrapperStyle={{ fontSize: 12 }} />
                         <Tooltip
                           formatter={(value) => formatEur(Number(value))}
-                          contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}
+                          contentStyle={{
+                            background: 'var(--bg-surface)',
+                            border: '1px solid var(--border-subtle)'
+                          }}
                         />
                       </PieChart>
                     </ResponsiveContainer>
@@ -345,42 +522,9 @@ export function StatisticsPage() {
                 ) : null}
               </div>
             ) : (
-              <p className="empty-hint">Aucune facture GSX rattachée à vos vols pour l’instant (nécessite GSX Pro 4+).</p>
-            )}
-          </section>
-
-          <section className="home-section">
-            <h2>Bénéfice (mode économie)</h2>
-            {data.profit.flightsWithRevenue > 0 ? (
-              <div className="stats-with-chart">
-                <StatGrid
-                  compact
-                  items={[
-                    { key: 'revenue', label: 'Revenu total', value: formatEur(data.profit.totalRevenueEur) },
-                    { key: 'cost', label: 'Coût GSX total', value: formatEur(data.profit.totalCostEur) },
-                    { key: 'profit', label: 'Bénéfice total', value: formatEur(data.profit.totalProfitEur) },
-                    { key: 'flights', label: 'Vols avec revenu', value: data.profit.flightsWithRevenue }
-                  ]}
-                />
-                {profitByCompanyData.length > 0 ? (
-                  <div className="pirep-chart-wrapper">
-                    <ResponsiveContainer width="100%" height={Math.max(180, profitByCompanyData.length * 36)}>
-                      <BarChart data={profitByCompanyData} layout="vertical" margin={{ top: 8, right: 20, bottom: 0, left: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-                        <XAxis type="number" tick={{ fontSize: 11 }} stroke="var(--text-muted)" />
-                        <YAxis dataKey="companyIcao" type="category" tick={{ fontSize: 12 }} stroke="var(--text-muted)" width={60} />
-                        <Tooltip
-                          formatter={(value) => formatEur(Number(value))}
-                          contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}
-                        />
-                        <Bar dataKey="profit" name="Bénéfice" fill="var(--status-on-time)" radius={[0, 4, 4, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <p className="empty-hint">Aucun vol avec des revenus mode économie pour l’instant.</p>
+              <p className="empty-hint">
+                Aucune facture GSX rattachée à vos vols pour l’instant (nécessite GSX Pro 4+).
+              </p>
             )}
           </section>
         </>
@@ -393,7 +537,10 @@ function LandingRateScaleInfo() {
   const floors = LANDING_RATE_CATEGORY_FLOOR_FPM
   const rows: Array<{ key: LandingRateCategory; range: string }> = [
     { key: 'very_smooth', range: `0 à ${floors.very_smooth} ft/min` },
-    { key: 'smooth', range: `${floors.very_smooth - 1} à ${floors.smooth} ft/min` },
+    {
+      key: 'smooth',
+      range: `${floors.very_smooth - 1} à ${floors.smooth} ft/min`
+    },
     { key: 'normal', range: `${floors.smooth - 1} à ${floors.normal} ft/min` },
     { key: 'firm', range: `${floors.normal - 1} à ${floors.firm} ft/min` },
     { key: 'hard', range: `${floors.firm - 1} à ${floors.hard} ft/min` },

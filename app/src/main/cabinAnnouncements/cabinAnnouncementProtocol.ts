@@ -17,10 +17,10 @@ export function registerCabinAnnouncementProtocol(): void {
   protocol.handle(CABIN_AUDIO_SCHEME, (request) => {
     const url = new URL(request.url)
     const parts = url.pathname.split('/').filter(Boolean)
-    if (url.hostname !== 'library' || parts.length !== 2) {
+    if (url.hostname !== 'library' || parts.length !== 1) {
       return new Response('Annonce introuvable', { status: 404 })
     }
-    const filePath = resolveCabinAnnouncementPath(parts[0], parts[1])
+    const filePath = resolveCabinAnnouncementPath(parts[0])
     if (!filePath) return new Response('Annonce introuvable', { status: 404 })
     return net.fetch(pathToFileURL(filePath).toString())
   })

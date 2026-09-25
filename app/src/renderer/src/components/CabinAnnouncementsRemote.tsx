@@ -21,7 +21,8 @@ export function CabinAnnouncementsRemote({ onClose }: { onClose: () => void }) {
     queryFn: () => window.flightops.cabinAnnouncements.list(company!.id),
     enabled: Boolean(company)
   })
-  const filesByType = new Map(files.map((file) => [file.type, file]))
+  const fileCountByType = new Map<string, number>()
+  for (const file of files) fileCountByType.set(file.type, (fileCountByType.get(file.type) ?? 0) + 1)
   const hasPlayback = Boolean(activeVoice || activeMusic || queuedTypes.length > 0)
 
   return (
@@ -63,7 +64,7 @@ export function CabinAnnouncementsRemote({ onClose }: { onClose: () => void }) {
         {isLoading ? <p className="empty-hint">Chargement de la bibliothèque…</p> : (
           <div className="cabin-remote-grid">
             {CABIN_ANNOUNCEMENT_DEFINITIONS.map((definition) => {
-              const file = filesByType.get(definition.type)
+              const fileCount = fileCountByType.get(definition.type) ?? 0
               const active = activeVoice?.type === definition.type || activeMusic?.type === definition.type
               const queued = queuedTypes.includes(definition.type)
               const origin = activeVoice?.type === definition.type ? activeVoice.origin
@@ -74,15 +75,15 @@ export function CabinAnnouncementsRemote({ onClose }: { onClose: () => void }) {
                   <div className="cabin-remote-copy">
                     <strong>{definition.label}</strong>
                     <span>{definition.trigger}</span>
-                    {!file ? <small>Non configurée pour cette compagnie</small>
+                    {fileCount === 0 ? <small>Non configurée pour cette compagnie</small>
                       : active ? <small className="cabin-playing-label">● En cours · {origin === 'automatic' ? 'automatique' : 'manuel'}</small>
                         : queued ? <small>Dans la file d’attente</small>
-                          : <small>Prête · volume {Math.round(file.volume * 100)}%</small>}
+                          : <small>Prête · {fileCount} fichier{fileCount > 1 ? 's' : ''}</small>}
                   </div>
                   {active || queued ? (
                     <button type="button" className="danger-ghost" onClick={() => stop(definition.type)}>Arrêter</button>
                   ) : (
-                    <button type="button" disabled={!file} onClick={() => play(definition.type)}>Lire</button>
+                    <button type="button" disabled={fileCount === 0} onClick={() => play(definition.type)}>Lire</button>
                   )}
                 </div>
               )

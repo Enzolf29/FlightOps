@@ -7,7 +7,6 @@ import { LiveTrackingPage } from '@renderer/pages/LiveTracking/LiveTrackingPage'
 import { PirepsPage } from '@renderer/pages/Pireps/PirepsPage'
 import { FleetPage } from '@renderer/pages/Fleet/FleetPage'
 import { StatisticsPage } from '@renderer/pages/Statistics/StatisticsPage'
-import { EconomyPage } from '@renderer/pages/Economy/EconomyPage'
 import { SettingsPage } from '@renderer/pages/Settings/SettingsPage'
 
 export const router = createHashRouter([
@@ -21,7 +20,6 @@ export const router = createHashRouter([
       { path: '/pireps', element: <PirepsPage /> },
       { path: '/flotte', element: <FleetPage /> },
       { path: '/statistiques', element: <StatisticsPage /> },
-      { path: '/economie', element: <EconomyPage /> },
       { path: '/parametres', element: <SettingsPage /> }
     ]
   }

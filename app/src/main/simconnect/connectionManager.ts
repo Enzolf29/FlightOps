@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { join } from 'node:path'
 import * as regedit from 'regedit'
-import { open, Protocol } from 'node-simconnect'
+import { open, Protocol, RawBuffer, SimConnectConstants, SimConnectDataType } from 'node-simconnect'
 import type { SimConnectConnection } from 'node-simconnect'
 import type { SimConnectStatus, SimTelemetry } from '@shared/types/simconnect'
 import { startTelemetryLoop } from './telemetryLoop'
@@ -41,6 +41,12 @@ let simulationActive = false
 // réellement dans toutes les situations (pause active, menu Échap...).
 let pausedLegacy = false
 let pausedEx1 = false
+// Définitions d'écriture SimConnect (une par L:var), enregistrées à la demande — voir setGsxLVar.
+// Propres à la connexion en cours : une nouvelle session SimConnect (reconnexion) n'a plus aucune
+// de ces définitions déjà enregistrées côté sim, d'où la remise à zéro dans connect()/handleDisconnect.
+const WRITE_DEFINITION_BASE = 2000
+let writeDefinitionIds = new Map<string, number>()
+let nextWriteDefinitionId = WRITE_DEFINITION_BASE
 
 const statusListeners = new Set<StatusListener>()
 const telemetryListeners = new Set<TelemetryListener>()
@@ -71,6 +77,31 @@ export function onLandingPrecisionTick(listener: LandingPrecisionListener): () =
   return () => landingPrecisionListeners.delete(listener)
 }
 
+/**
+ * Écrit une valeur numérique dans une L:var (ex. "L:FSDT_GSX_MENU_OPEN") — utilisé pour piloter le
+ * menu GSX depuis la tablette (voir main/gsx/gsxMenuController.ts). Enregistre une définition
+ * d'écriture dédiée à la première utilisation de chaque nom, puis la réutilise. Sans effet (renvoie
+ * false) si SimConnect n'est pas connecté.
+ */
+export function setGsxLVar(name: string, value: number): boolean {
+  if (!handle) return false
+  let definitionId = writeDefinitionIds.get(name)
+  if (definitionId === undefined) {
+    definitionId = nextWriteDefinitionId++
+    handle.addToDataDefinition(definitionId, name, 'number', SimConnectDataType.FLOAT64)
+    writeDefinitionIds.set(name, definitionId)
+  }
+  const buffer = new RawBuffer(8)
+  buffer.writeFloat64(value)
+  handle.setDataOnSimObject(definitionId, SimConnectConstants.OBJECT_ID_USER, { buffer, arrayCount: 0, tagged: false })
+  return true
+}
+
+function resetGsxWriteDefinitions(): void {
+  writeDefinitionIds = new Map()
+  nextWriteDefinitionId = WRITE_DEFINITION_BASE
+}
+
 /** À appeler une seule fois au démarrage de l'app. */
 export function startConnectionManager(): void {
   connect()
@@ -82,6 +113,7 @@ function connect(): void {
   open(APP_NAME, Protocol.SunRise)
     .then(({ handle: connection }) => {
       handle = connection
+      resetGsxWriteDefinitions()
       setStatus('connected')
 
       // L'évènement système "Sim" renvoie immédiatement l'état courant puis 1/0 à chaque passage
@@ -147,6 +179,7 @@ function handleDisconnect(): void {
     handle.close()
     handle = null
   }
+  resetGsxWriteDefinitions()
   setStatus('disconnected')
   scheduleReconnect()
 }

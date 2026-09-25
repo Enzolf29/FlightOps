@@ -9,10 +9,6 @@ export interface Aircraft {
   /** Code transpondeur Mode S (hex), récupéré via adsbdb lors de la création automatique. */
   modeS: string | null
   notes: string | null
-  /** Capacité sièges (mode économie) — préremplie selon le type à la création, modifiable. */
-  seatCapacity: number
-  /** Capacité fret en soute, kg (mode économie) — préremplie selon le type à la création, modifiable. */
-  cargoCapacityKg: number
 }
 
 export interface AircraftCompanySummary {
@@ -49,8 +45,6 @@ export interface AircraftInput {
   simbriefFin: string | null
   modeS: string | null
   notes: string | null
-  seatCapacity: number
-  cargoCapacityKg: number
 }
 
 export type AircraftPatch = Partial<AircraftInput>

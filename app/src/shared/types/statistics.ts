@@ -9,11 +9,15 @@ export interface CompanyFlightCount {
   companyIcao: string
   companyName: string
   count: number
+  hours: number
+  distanceNm: number
 }
 
 export interface AircraftTypeFlightCount {
   type: string
   count: number
+  hours: number
+  distanceNm: number
 }
 
 export interface RouteFlightCount {
@@ -66,26 +70,11 @@ export interface PunctualityExtremes {
   mostEarly: PunctualityExtremeFlight | null
 }
 
-export interface CompanyProfitBreakdown {
-  companyIcao: string
-  companyName: string
-  revenueEur: number
-  costEur: number
-  profitEur: number
-}
-
-export interface ProfitStats {
-  totalRevenueEur: number
-  totalCostEur: number
-  totalProfitEur: number
-  /** Nombre de vols avec un revenu connu (mode économie), tous compagnies confondues. */
-  flightsWithRevenue: number
-  byCompany: CompanyProfitBreakdown[]
-}
-
 export interface StatisticsOverview {
   totalFlights: number
   cumulativeHours: number
+  totalDistanceNm: number
+  totalFuelBurnedKg: number
   monthlyHours: MonthlyHoursPoint[]
   byCompany: CompanyFlightCount[]
   byAircraftType: AircraftTypeFlightCount[]
@@ -94,5 +83,4 @@ export interface StatisticsOverview {
   punctualityExtremes: PunctualityExtremes
   landingRate: LandingRateStats
   gsxCosts: GsxCostStats
-  profit: ProfitStats
 }

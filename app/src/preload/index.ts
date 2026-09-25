@@ -14,11 +14,14 @@ import type { PirepApproachProfilePoint, PirepFlightPathPoint, PirepTelemetrySam
 import type { FlightRecorderStatus, SimConnectStatus, SimTelemetry } from '@shared/types/simconnect'
 import type { StatisticsOverview } from '@shared/types/statistics'
 import type { FlightEvent } from '@shared/flightStatus/evaluateFlightEvents'
-import type { CabinAnnouncementFile, CabinAnnouncementType } from '@shared/types/cabinAnnouncements'
+import type {
+  CabinAnnouncementFile,
+  CabinAnnouncementType,
+  CabinAnnouncementVariant
+} from '@shared/types/cabinAnnouncements'
 import type { TabletCabinCommand, TabletCabinStatus, TabletServerInfo } from '@shared/types/tablet'
 import type { AppUpdateStatus } from '@shared/types/appUpdate'
 import type { GsxCostStats, GsxReceipt } from '@shared/types/gsxReceipt'
-import type { CompanyEconomySummary, FlightEconomy, RoutePrice, RoutePriceInput } from '@shared/types/economy'
 import type { FlightopsApi } from '@shared/ipc/api'
 
 const flightopsApi: FlightopsApi = {
@@ -130,12 +133,15 @@ const flightopsApi: FlightopsApi = {
   cabinAnnouncements: {
     list: (companyId: number): Promise<CabinAnnouncementFile[]> =>
       ipcRenderer.invoke(IPC.cabinAnnouncements.list, companyId),
-    import: (companyId: number, type: CabinAnnouncementType): Promise<CabinAnnouncementFile | null> =>
-      ipcRenderer.invoke(IPC.cabinAnnouncements.import, companyId, type),
-    remove: (companyId: number, type: CabinAnnouncementType): Promise<void> =>
-      ipcRenderer.invoke(IPC.cabinAnnouncements.remove, companyId, type),
-    setVolume: (companyId: number, type: CabinAnnouncementType, volume: number): Promise<CabinAnnouncementFile> =>
-      ipcRenderer.invoke(IPC.cabinAnnouncements.setVolume, companyId, type, volume)
+    import: (
+      companyId: number,
+      type: CabinAnnouncementType,
+      variant: CabinAnnouncementVariant
+    ): Promise<CabinAnnouncementFile | null> =>
+      ipcRenderer.invoke(IPC.cabinAnnouncements.import, companyId, type, variant),
+    remove: (fileId: number): Promise<void> => ipcRenderer.invoke(IPC.cabinAnnouncements.remove, fileId),
+    setVolume: (fileId: number, volume: number): Promise<CabinAnnouncementFile> =>
+      ipcRenderer.invoke(IPC.cabinAnnouncements.setVolume, fileId, volume)
   },
   tablet: {
     getServerInfo: (): Promise<TabletServerInfo> => ipcRenderer.invoke(IPC.tablet.getServerInfo),
@@ -168,29 +174,6 @@ const flightopsApi: FlightopsApi = {
     getCostStatsForAircraft: (aircraftId: number): Promise<GsxCostStats> =>
       ipcRenderer.invoke(IPC.gsx.getCostStatsForAircraft, aircraftId),
     excludeReceipt: (receiptId: string): Promise<void> => ipcRenderer.invoke(IPC.gsx.excludeReceipt, receiptId)
-  },
-  economy: {
-    listRoutePrices: (companyId: number): Promise<RoutePrice[]> => ipcRenderer.invoke(IPC.economy.listRoutePrices, companyId),
-    getRoutePrice: (companyId: number, departureIcao: string, arrivalIcao: string): Promise<RoutePrice | null> =>
-      ipcRenderer.invoke(IPC.economy.getRoutePrice, companyId, departureIcao, arrivalIcao),
-    upsertRoutePrice: (input: RoutePriceInput): Promise<RoutePrice> => ipcRenderer.invoke(IPC.economy.upsertRoutePrice, input),
-    deleteRoutePrice: (id: number): Promise<void> => ipcRenderer.invoke(IPC.economy.deleteRoutePrice, id),
-    getRouteGsxCostHint: (
-      companyId: number,
-      departureIcao: string,
-      arrivalIcao: string
-    ): Promise<{ averageGsxCostEur: number | null; flightsFlown: number }> =>
-      ipcRenderer.invoke(IPC.economy.getRouteGsxCostHint, companyId, departureIcao, arrivalIcao),
-    getFlightEconomy: (flightId: number): Promise<FlightEconomy | null> =>
-      ipcRenderer.invoke(IPC.economy.getFlightEconomy, flightId),
-    getCompanyEconomySummary: (companyId: number): Promise<CompanyEconomySummary> =>
-      ipcRenderer.invoke(IPC.economy.getCompanyEconomySummary, companyId),
-    getAircraftEconomySummary: (aircraftId: number): Promise<CompanyEconomySummary> =>
-      ipcRenderer.invoke(IPC.economy.getAircraftEconomySummary, aircraftId),
-    getAirportSurcharge: (companyId: number, departureIcao: string): Promise<number> =>
-      ipcRenderer.invoke(IPC.economy.getAirportSurcharge, companyId, departureIcao),
-    getRouteSurcharge: (companyId: number, departureIcao: string, arrivalIcao: string): Promise<number> =>
-      ipcRenderer.invoke(IPC.economy.getRouteSurcharge, companyId, departureIcao, arrivalIcao)
   }
 }
 

@@ -11,6 +11,9 @@ export interface CabinLoadsheetSnapshot {
   maxZeroFuelWeightKg: number | null
   maxTakeoffWeightKg: number | null
   maxLandingWeightKg: number | null
+  /** Centre de gravité en %MAC publié par MSFS (CG PERCENT) au moment de la capture — utilisé
+   * comme MACZFW, SimBrief ne publiant pas cette donnée dans son OFP. */
+  macZfwPercent: number | null
 }
 
 export type LoadsheetValueSource =
@@ -28,6 +31,6 @@ export interface LoadsheetComparisonRow {
   planned: number | null
   final: number | null
   limit: number | null
-  unit: 'kg' | 'pax'
+  unit: 'kg' | 'pax' | 'percent'
   source: LoadsheetValueSource
 }

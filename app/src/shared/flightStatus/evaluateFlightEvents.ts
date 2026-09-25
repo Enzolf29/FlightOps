@@ -11,7 +11,7 @@ export type FlightEventType =
   | 'gear'
   | 'ground_overspeed'
   | 'ground_overspeed_end'
-  | 'bank_angle'
+  | 'bank_angle' // ancien évènement, plus émis mais encore présent dans les journaux existants
   | 'engine_start'
   | 'engine_stop'
   | 'lights'
@@ -33,7 +33,6 @@ export type FlightPhase = 'ground' | 'climb' | 'cruise' | 'descent'
 
 export interface FlightEventFlags {
   wasAirborne: boolean
-  bankExceeded: boolean
   flightPhase: FlightPhase
   airOverspeedExceeded: boolean
   airOverspeedMaxKt: number
@@ -69,7 +68,6 @@ export interface FlightEventFlags {
 
 export const INITIAL_FLIGHT_EVENT_FLAGS: FlightEventFlags = {
   wasAirborne: false,
-  bankExceeded: false,
   flightPhase: 'ground',
   airOverspeedExceeded: false,
   airOverspeedMaxKt: 0,
@@ -110,7 +108,6 @@ const GROUND_OVERSPEED_RECOVER_KNOTS = 27
  */
 const TAKEOFF_ROLL_STREAK_TICKS = 5
 export const HARD_LANDING_VS_FPM = -600
-const BANK_ANGLE_LIMIT_DEGREES = 30
 /**
  * Durée minimale (secondes) depuis le dernier décollage avant qu'un contact au sol compte comme
  * un véritable atterrissage — un rebond (pushback GSX au parking, l'avion retouche la piste au
@@ -368,12 +365,6 @@ export function evaluateFlightEvents(
     )
     nextFlags = { ...nextFlags, groundOverspeedExceeded: false, groundOverspeedMaxKt: 0 }
   }
-
-  const bankExceededNow = Math.abs(current.bankDegrees) > BANK_ANGLE_LIMIT_DEGREES
-  if (bankExceededNow && !flags.bankExceeded) {
-    events.push(makeEvent(current, 'bank_angle', 'warning', `Inclinaison excessive : ${Math.round(current.bankDegrees)}°`))
-  }
-  nextFlags = { ...nextFlags, bankExceeded: bankExceededNow }
 
   // Phases de vol (croisière/descente) : uniquement en l'air. La vitesse verticale seule décide
   // de la phase "candidate" à chaque tick, mais on ne bascule (et on n'émet l'évènement) qu'après

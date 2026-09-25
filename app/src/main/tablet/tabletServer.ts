@@ -31,6 +31,7 @@ import {
 import { TABLET_PAGE_HTML } from './tabletPage'
 import { getCompanyBackgroundPng } from './tabletCompanyBackgrounds'
 import { requestOnlineAtis, type OnlineAtisNetwork } from './onlineAtisClient'
+import { openGsxMenu, selectGsxMenuItem } from '../gsx/gsxMenuController'
 import { createTabletCertificate, type TabletCertificateBundle } from './tabletCertificate'
 import {
   buildTabletSetupHtml,
@@ -452,6 +453,22 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
     }
     for (const listener of cabinCommandListeners) listener(command)
     sendJson(response, 200, { ok: true })
+    return
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/gsx/menu/open') {
+    sendJson(response, 200, { menu: await openGsxMenu() })
+    return
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/gsx/menu/select') {
+    const body = await readJson(request)
+    const index = Number(body.index)
+    if (!Number.isInteger(index) || index < 0) {
+      sendJson(response, 400, { error: 'Index de menu invalide.' })
+      return
+    }
+    sendJson(response, 200, { menu: await selectGsxMenuItem(index) })
     return
   }
 

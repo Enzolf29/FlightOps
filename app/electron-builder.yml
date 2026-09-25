@@ -13,6 +13,8 @@ asarUnpack:
 extraResources:
   - from: resources/tablet-backgrounds
     to: tablet-backgrounds
+  - from: resources/cabin-announcements
+    to: cabin-announcements
 npmRebuild: false
 publish:
   provider: github

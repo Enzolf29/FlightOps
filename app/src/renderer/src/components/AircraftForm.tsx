@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import type { Company } from '@shared/types/company'
 import type { AircraftInput, AircraftWithStats } from '@shared/types/aircraft'
-import { getDefaultCargoCapacityKg, getDefaultSeatCapacity } from '@shared/aircraft/aircraftCapacityDefaults'
 
 interface AircraftFormProps {
   companies: Company[]
@@ -20,12 +19,6 @@ export function AircraftForm({ companies, initial, onSubmit, onCancel, submittin
   const [simbriefFin, setSimbriefFin] = useState(initial?.simbriefFin ?? '')
   const [modeS, setModeS] = useState(initial?.modeS ?? '')
   const [notes, setNotes] = useState(initial?.notes ?? '')
-  const [seatCapacity, setSeatCapacity] = useState(
-    initial?.seatCapacity ?? getDefaultSeatCapacity(initial?.simbriefIcaoCode ?? initial?.type ?? '')
-  )
-  const [cargoCapacityKg, setCargoCapacityKg] = useState(
-    initial?.cargoCapacityKg ?? getDefaultCargoCapacityKg(initial?.simbriefIcaoCode ?? initial?.type ?? '')
-  )
 
   const [lookupLoading, setLookupLoading] = useState(false)
   const [lookupError, setLookupError] = useState<string | null>(null)
@@ -42,12 +35,6 @@ export function AircraftForm({ companies, initial, onSubmit, onCancel, submittin
       setType(result.typeDescription)
       if (result.icaoType) {
         setSimbriefIcaoCode(result.icaoType)
-        // Un lookup ADS-B n'a de sens qu'à la création (l'immatriculation ne change pas) : ne
-        // jamais écraser une capacité déjà corrigée à la main sur un avion existant.
-        if (!initial) {
-          setSeatCapacity(getDefaultSeatCapacity(result.icaoType))
-          setCargoCapacityKg(getDefaultCargoCapacityKg(result.icaoType))
-        }
       }
       setModeS(result.modeS ?? '')
 
@@ -78,9 +65,7 @@ export function AircraftForm({ companies, initial, onSubmit, onCancel, submittin
       simbriefIcaoCode: simbriefIcaoCode.trim() || null,
       simbriefFin: simbriefFin.trim() || null,
       modeS: modeS.trim() || null,
-      notes: notes.trim() || null,
-      seatCapacity,
-      cargoCapacityKg
+      notes: notes.trim() || null
     })
   }
 
@@ -134,26 +119,6 @@ export function AircraftForm({ companies, initial, onSubmit, onCancel, submittin
           value={simbriefFin}
           onChange={(event) => setSimbriefFin(event.target.value)}
           placeholder="ex. 123456_1582090020 (visible en haut de la fiche avion sur SimBrief)"
-        />
-      </label>
-
-      <label className="form-field">
-        <span>Capacité sièges (mode économie)</span>
-        <input
-          type="number"
-          min={0}
-          value={seatCapacity}
-          onChange={(event) => setSeatCapacity(Number(event.target.value))}
-        />
-      </label>
-
-      <label className="form-field">
-        <span>Capacité fret, kg (mode économie)</span>
-        <input
-          type="number"
-          min={0}
-          value={cargoCapacityKg}
-          onChange={(event) => setCargoCapacityKg(Number(event.target.value))}
         />
       </label>
 

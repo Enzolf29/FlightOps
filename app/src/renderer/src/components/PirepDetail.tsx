@@ -17,14 +17,12 @@ import {
   TrendingUpIcon
 } from '@renderer/components/icons'
 import { AIRPORT_NAMES } from '@shared/airports/airportNames'
-import { formatDateTime, formatEur, formatHours, parseUtc } from '@renderer/lib/format'
+import { formatDateTime, formatHours, parseUtc } from '@renderer/lib/format'
 import { DELAY_BUCKET_LABEL, DELAY_BUCKET_VARIANT } from '@renderer/lib/labels'
 import { formatDelayDuration } from '@shared/flightStatus/formatDelayDuration'
 import { usePirepApproachProfile, usePirepEvents, usePirepFlightPath, usePirepTelemetrySamples } from '@renderer/hooks/usePireps'
 import { useGsxReceipts } from '@renderer/hooks/useGsxReceipts'
-import { useFlightEconomy } from '@renderer/hooks/useEconomy'
 import { useOfpDetail } from '@renderer/hooks/useOfpDetail'
-import { parseGsxEurAmount } from '@shared/gsx/parseGsxEurAmount'
 import { PirepReplay } from './PirepReplay'
 import { analyzePirepTelemetry } from '@shared/flightStatus/analyzePirepTelemetry'
 
@@ -57,7 +55,6 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
   const { data: telemetrySamples } = usePirepTelemetrySamples(pirep.id)
   const { data: ofp } = useOfpDetail(flight.id, flight.source === 'simbrief')
   const { data: gsxReceipts, isLoading: gsxReceiptsLoading } = useGsxReceipts(flight.id, pirep.engineStopTime, true)
-  const { data: flightEconomy } = useFlightEconomy(flight.id)
 
   const approachChartData = (approachProfile ?? []).map((point) => ({
     time: formatInTimeZone(parseUtc(point.timeIso), 'UTC', 'HH:mm:ss'),
@@ -75,11 +72,6 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
     : null
   const plannedFuelUsed = plannedFuelUsedRaw === null ? null : ofp?.loadsheet?.units === 'lbs' ? plannedFuelUsedRaw / 2.2046226218 : plannedFuelUsedRaw
   const scheduledMinutes = Math.max(0, (parseUtc(flight.scheduledArrival).getTime() - parseUtc(flight.scheduledDeparture).getTime()) / 60000)
-  const gsxTotalCostEur = gsxReceipts && gsxReceipts.length > 0
-    ? gsxReceipts.reduce((sum, receipt) => sum + (parseGsxEurAmount(receipt.total) ?? 0), 0)
-    : null
-  const profitEur = flightEconomy?.revenueEur != null ? flightEconomy.revenueEur - (gsxTotalCostEur ?? 0) : null
-  const hasFinanceData = Boolean(flightEconomy) || Boolean(gsxReceipts && gsxReceipts.length > 0)
   const telemetryChartData = (telemetrySamples ?? []).map((sample) => ({
     time: formatInTimeZone(parseUtc(sample.timeIso), 'UTC', 'HH:mm'),
     altitude: Math.round(sample.altitudeFeet),
@@ -315,29 +307,7 @@ export function PirepDetail({ pirep }: PirepDetailProps) {
         />
       </section>
 
-      {hasFinanceData ? (
-        <section className="pirep-detail-section">
-          <h3>Finance</h3>
-          <StatGrid
-            items={[
-              { key: 'revenue', label: 'Revenu', value: flightEconomy?.revenueEur != null ? formatEur(flightEconomy.revenueEur) : '—' },
-              { key: 'cost', label: 'Coût GSX', value: gsxTotalCostEur !== null ? formatEur(gsxTotalCostEur) : '—' },
-              { key: 'profit', label: 'Bénéfice', value: profitEur !== null ? formatEur(profitEur) : '—' }
-            ]}
-          />
-          {flightEconomy ? (
-            <StatGrid
-              compact
-              items={[
-                { key: 'ticket', label: 'Prix billet', value: formatEur(flightEconomy.ticketPriceEur), detail: `Référence ${formatEur(flightEconomy.referenceTicketPriceEur)}` },
-                { key: 'pax', label: 'Passagers vendus', value: flightEconomy.passengersSold ?? '—' },
-                { key: 'baggage', label: 'Bagages en soute', value: flightEconomy.checkedBagsSold !== null ? `${flightEconomy.checkedBagsSold} (${formatEur(flightEconomy.baggagePriceEur)}/bagage)` : '—' }
-              ]}
-            />
-          ) : null}
-          <GsxReceiptsPanel receipts={gsxReceipts ?? []} isLoading={gsxReceiptsLoading} bare />
-        </section>
-      ) : null}
+      <GsxReceiptsPanel receipts={gsxReceipts ?? []} isLoading={gsxReceiptsLoading} sectionClassName="pirep-detail-section" />
 
       <section className="pirep-detail-section">
         <h3>Journal d’évènements</h3>

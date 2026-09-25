@@ -15,7 +15,7 @@ const actual: CabinLoadsheetSnapshot = {
   capturedAt: '2026-09-01T18:00:00.000Z', captureSource: 'gsx', passengersTarget: 98, passengersBoarded: 97,
   cargoBoardingPercent: 100, totalWeightKg: 35_800, emptyWeightKg: 20_000,
   fuelWeightKg: 6_000, maxGrossWeightKg: 40_500, maxZeroFuelWeightKg: 34_500,
-  maxTakeoffWeightKg: 40_000, maxLandingWeightKg: 38_000
+  maxTakeoffWeightKg: 40_000, maxLandingWeightKg: 38_000, macZfwPercent: 24.6
 }
 
 describe('buildLoadsheetComparison', () => {
@@ -35,6 +35,16 @@ describe('buildLoadsheetComparison', () => {
     expect(rows.find((row) => row.key === 'zfw')).toMatchObject({ final: 29_800, limit: 34_500 })
     expect(rows.find((row) => row.key === 'tow')).toMatchObject({ final: 35_600, source: 'calculated' })
     expect(rows.find((row) => row.key === 'takeoffFuel')).toMatchObject({ final: 5_800 })
+  })
+
+  it('exposes MACZFW from the simulator CG with no planned SimBrief counterpart', () => {
+    const rows = buildLoadsheetComparison(plan, actual)
+    expect(rows.find((row) => row.key === 'macZfw')).toMatchObject({
+      planned: null,
+      final: 24.6,
+      source: 'simulator',
+      unit: 'percent'
+    })
   })
 
   it('labels unavailable real values as SimBrief fallbacks', () => {

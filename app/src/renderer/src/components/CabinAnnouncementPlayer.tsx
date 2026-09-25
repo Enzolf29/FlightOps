@@ -12,6 +12,7 @@ import {
 } from '@shared/cabinAnnouncements/evaluateCabinAnnouncementTriggers'
 import type { SimTelemetry } from '@shared/types/simconnect'
 import { isCabinAutomationEligible } from '@shared/cabinAnnouncements/isCabinAutomationEligible'
+import { dayPeriodFromTimeOfDay, pickAnnouncementFile } from '@shared/cabinAnnouncements/pickAnnouncementFile'
 import {
   evaluateLoadsheetCompletion,
   INITIAL_LOADSHEET_COMPLETION_STATE,
@@ -44,7 +45,8 @@ function makeLoadsheetSnapshot(telemetry: SimTelemetry, captureSource: Loadsheet
     maxGrossWeightKg: positiveOrNull(telemetry.maxGrossWeightKg),
     maxZeroFuelWeightKg: positiveOrNull(telemetry.maxZeroFuelWeightKg),
     maxTakeoffWeightKg: positiveOrNull(telemetry.maxTakeoffWeightKg),
-    maxLandingWeightKg: positiveOrNull(telemetry.maxLandingWeightKg)
+    maxLandingWeightKg: positiveOrNull(telemetry.maxLandingWeightKg),
+    macZfwPercent: positiveOrNull(telemetry.cgPercent)
   }
 }
 
@@ -85,7 +87,12 @@ export function CabinAnnouncementPlayer() {
     enabled: companyId !== null
   })
 
-  const filesRef = useRef<Map<CabinAnnouncementType, CabinAnnouncementFile>>(new Map())
+  // Plusieurs fichiers possibles par annonce : l'un d'eux est tiré au hasard à chaque lecture (voir chooseFile).
+  const filesRef = useRef<Map<CabinAnnouncementType, CabinAnnouncementFile[]>>(new Map())
+  const lastPlayedFileIdRef = useRef<Map<CabinAnnouncementType, number>>(new Map())
+  const musicFileIdRef = useRef<number | null>(null)
+  const timeOfDayRef = useRef<number | undefined>(undefined)
+  if (typeof telemetry?.timeOfDay === 'number') timeOfDayRef.current = telemetry.timeOfDay
   const queueRef = useRef<QueuedAnnouncement[]>([])
   const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const delayedTypeRef = useRef<CabinAnnouncementType | null>(null)
@@ -115,11 +122,26 @@ export function CabinAnnouncementPlayer() {
   }, [])
 
   useEffect(() => {
-    filesRef.current = new Map(files.map((file) => [file.type, file]))
-    const musicVolume = filesRef.current.get('boarding_music')?.volume ?? 1
-    musicBaseVolumeRef.current = musicVolume
-    if (musicRef.current) musicRef.current.volume = voiceRef.current ? musicVolume * 0.2 : musicVolume
+    const grouped = new Map<CabinAnnouncementType, CabinAnnouncementFile[]>()
+    for (const file of files) grouped.set(file.type, [...(grouped.get(file.type) ?? []), file])
+    filesRef.current = grouped
+    // Le volume de la musique en cours suit le fichier réellement joué, pas un autre de la même annonce.
+    const playingMusic = files.find((file) => file.id === musicFileIdRef.current)
+    if (playingMusic) {
+      musicBaseVolumeRef.current = playingMusic.volume
+      if (musicRef.current) musicRef.current.volume = voiceRef.current ? playingMusic.volume * 0.2 : playingMusic.volume
+    }
   }, [files])
+
+  const chooseFile = useCallback((type: CabinAnnouncementType): CabinAnnouncementFile | null => {
+    const picked = pickAnnouncementFile(
+      filesRef.current.get(type) ?? [],
+      dayPeriodFromTimeOfDay(timeOfDayRef.current),
+      lastPlayedFileIdRef.current.get(type) ?? null
+    )
+    if (picked) lastPlayedFileIdRef.current.set(type, picked.id)
+    return picked
+  }, [])
 
   const stopMusic = useCallback(() => {
     const music = musicRef.current
@@ -162,7 +184,7 @@ export function CabinAnnouncementPlayer() {
     }
 
     const queued = queueRef.current.shift()!
-    const file = filesRef.current.get(queued.type)
+    const file = chooseFile(queued.type)
     if (!file) {
       // Le fichier a disparu entre l'ajout à la file et sa lecture (ex. supprimé des paramètres) :
       // le débarquement ne sera jamais annoncé, la clôture du vol ne doit pas rester en attente.
@@ -200,7 +222,7 @@ export function CabinAnnouncementPlayer() {
     audio.onended = finish
     audio.onerror = finish
     audio.play().catch(finish)
-  }, [publishPlayback])
+  }, [chooseFile, publishPlayback])
 
   const startMusic = useCallback((origin: CabinPlaybackOrigin) => {
     if (musicRef.current) {
@@ -208,8 +230,9 @@ export function CabinAnnouncementPlayer() {
       publishPlayback()
       return
     }
-    const file = filesRef.current.get('boarding_music')
+    const file = chooseFile('boarding_music')
     if (!file) return
+    musicFileIdRef.current = file.id
     const audio = new Audio(file.audioUrl)
     audio.loop = true
     musicBaseVolumeRef.current = file.volume
@@ -231,7 +254,7 @@ export function CabinAnnouncementPlayer() {
         publishPlayback()
       }
     })
-  }, [publishPlayback])
+  }, [chooseFile, publishPlayback])
 
   const stopVoice = useCallback(() => {
     const voice = voiceRef.current
@@ -320,7 +343,7 @@ export function CabinAnnouncementPlayer() {
         activeVoice: state.activeVoice,
         activeMusic: state.activeMusic,
         queuedTypes: state.queuedTypes,
-        availableTypes: files.map((file) => file.type),
+        availableTypes: [...new Set(files.map((file) => file.type))],
         boardingCompleted: state.boardingCompleted,
         finalLoadsheet: state.finalLoadsheet
       })

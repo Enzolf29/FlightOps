@@ -2,11 +2,9 @@ import { getDb } from '../index'
 import type {
   AircraftTypeFlightCount,
   CompanyFlightCount,
-  CompanyProfitBreakdown,
   LandingRateCategoryCount,
   LandingRateStats,
   MonthlyHoursPoint,
-  ProfitStats,
   PunctualityBreakdown,
   PunctualityExtremeFlight,
   PunctualityExtremes,
@@ -21,9 +19,9 @@ import {
 } from '@shared/flightStatus/categorizeLandingRate'
 import type { GsxCostStats } from '@shared/types/gsxReceipt'
 import { getGsxCostStatsForFlights } from '../../gsx/gsxReceiptsRepository'
+import { computeFuelBurnedKg, computePirepDistanceNm } from '@shared/flightStatus/computePirepMetrics'
+import { getAirportCoordinates } from '@shared/airports/airportCoordinates'
 import { getAllPireps, getCumulativeStats, getPirepsByAircraft } from './pirepRepository'
-import { getAllCompanies } from './companyRepository'
-import { getCompanyEconomySummary } from './economyRepository'
 
 const TOP_ROUTES_LIMIT = 10
 const LANDING_RATE_CATEGORY_ORDER: LandingRateCategory[] = ['very_smooth', 'smooth', 'normal', 'firm', 'hard', 'very_hard']
@@ -41,34 +39,88 @@ function getMonthlyHours(): MonthlyHoursPoint[] {
   return rows.map((row) => ({ month: row.month, hours: row.total_minutes / 60 }))
 }
 
-function getFlightsByCompany(): CompanyFlightCount[] {
+interface PirepMetricsRow {
+  flight_path_json: string | null
+  departure_icao: string
+  arrival_icao: string
+  flight_time_minutes: number | null
+  fuel_at_engine_start_kg: number | null
+  fuel_at_engine_stop_kg: number | null
+  fuel_at_touchdown_kg: number | null
+  company_icao: string
+  company_name: string
+  aircraft_type: string
+}
+
+interface PirepMetrics {
+  hours: number
+  distanceNm: number
+  fuelBurnedKg: number
+  companyIcao: string
+  companyName: string
+  aircraftType: string
+}
+
+/** Distance, heures et carburant réellement brûlé de chaque compte rendu, calculés une seule fois. */
+function getPirepMetrics(): PirepMetrics[] {
   const rows = getDb()
     .prepare(
-      `SELECT c.icao_code AS company_icao, c.display_name AS company_name, COUNT(*) AS count
+      `SELECT p.flight_path_json, f.departure_icao, f.arrival_icao, p.flight_time_minutes,
+              p.fuel_at_engine_start_kg, p.fuel_at_engine_stop_kg, p.fuel_at_touchdown_kg,
+              c.icao_code AS company_icao, c.display_name AS company_name, a.type AS aircraft_type
        FROM pireps p
        JOIN flights f ON f.id = p.flight_id
        JOIN companies c ON c.id = f.company_id
-       GROUP BY c.id
-       ORDER BY count DESC`
+       JOIN aircraft a ON a.id = f.aircraft_id`
     )
-    .all() as Array<{ company_icao: string; company_name: string; count: number }>
+    .all() as PirepMetricsRow[]
 
-  return rows.map((row) => ({ companyIcao: row.company_icao, companyName: row.company_name, count: row.count }))
+  return rows.map((row) => ({
+    hours: (row.flight_time_minutes ?? 0) / 60,
+    distanceNm: computePirepDistanceNm(
+      row.flight_path_json,
+      getAirportCoordinates(row.departure_icao),
+      getAirportCoordinates(row.arrival_icao)
+    ),
+    fuelBurnedKg: computeFuelBurnedKg(row.fuel_at_engine_start_kg, row.fuel_at_engine_stop_kg, row.fuel_at_touchdown_kg),
+    companyIcao: row.company_icao,
+    companyName: row.company_name,
+    aircraftType: row.aircraft_type
+  }))
 }
 
-function getFlightsByAircraftType(): AircraftTypeFlightCount[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT a.type AS type, COUNT(*) AS count
-       FROM pireps p
-       JOIN flights f ON f.id = p.flight_id
-       JOIN aircraft a ON a.id = f.aircraft_id
-       GROUP BY a.type
-       ORDER BY count DESC`
-    )
-    .all() as Array<{ type: string; count: number }>
+function groupMetrics<K extends string>(
+  metrics: PirepMetrics[],
+  keyOf: (metric: PirepMetrics) => K
+): Map<K, { count: number; hours: number; distanceNm: number; sample: PirepMetrics }> {
+  const groups = new Map<K, { count: number; hours: number; distanceNm: number; sample: PirepMetrics }>()
+  for (const metric of metrics) {
+    const key = keyOf(metric)
+    const group = groups.get(key) ?? { count: 0, hours: 0, distanceNm: 0, sample: metric }
+    group.count += 1
+    group.hours += metric.hours
+    group.distanceNm += metric.distanceNm
+    groups.set(key, group)
+  }
+  return groups
+}
 
-  return rows.map((row) => ({ type: row.type, count: row.count }))
+function getFlightsByCompany(metrics: PirepMetrics[]): CompanyFlightCount[] {
+  return [...groupMetrics(metrics, (metric) => metric.companyIcao).values()]
+    .map((group) => ({
+      companyIcao: group.sample.companyIcao,
+      companyName: group.sample.companyName,
+      count: group.count,
+      hours: group.hours,
+      distanceNm: group.distanceNm
+    }))
+    .sort((a, b) => b.count - a.count)
+}
+
+function getFlightsByAircraftType(metrics: PirepMetrics[]): AircraftTypeFlightCount[] {
+  return [...groupMetrics(metrics, (metric) => metric.aircraftType).values()]
+    .map((group) => ({ type: group.sample.aircraftType, count: group.count, hours: group.hours, distanceNm: group.distanceNm }))
+    .sort((a, b) => b.count - a.count)
 }
 
 function getTopRoutes(limit: number): RouteFlightCount[] {
@@ -238,54 +290,22 @@ export function getGsxCostStatsForAircraft(aircraftId: number): GsxCostStats {
   return gsxCostStatsForPireps(getPirepsByAircraft(aircraftId))
 }
 
-/** Revenu, coût GSX et bénéfice agrégés sur toutes les compagnies — réutilise
- * getCompanyEconomySummary (même calcul que la page Économie) plutôt que de le recalculer ici. */
-function getProfitStats(): ProfitStats {
-  const byCompany: CompanyProfitBreakdown[] = []
-  let totalRevenueEur = 0
-  let totalCostEur = 0
-  let flightsWithRevenue = 0
-
-  for (const company of getAllCompanies()) {
-    const summary = getCompanyEconomySummary(company.id)
-    if (summary.flightsWithData === 0) continue
-    totalRevenueEur += summary.totalRevenueEur
-    totalCostEur += summary.totalCostEur
-    flightsWithRevenue += summary.flightsWithData
-    byCompany.push({
-      companyIcao: company.icaoCode,
-      companyName: company.displayName,
-      revenueEur: summary.totalRevenueEur,
-      costEur: summary.totalCostEur,
-      profitEur: summary.profitEur
-    })
-  }
-
-  byCompany.sort((a, b) => b.profitEur - a.profitEur)
-
-  return {
-    totalRevenueEur,
-    totalCostEur,
-    totalProfitEur: totalRevenueEur - totalCostEur,
-    flightsWithRevenue,
-    byCompany
-  }
-}
-
 export function getStatisticsOverview(): StatisticsOverview {
   const { cumulativeHours, totalFlights } = getCumulativeStats()
+  const metrics = getPirepMetrics()
 
   return {
     totalFlights,
     cumulativeHours,
+    totalDistanceNm: metrics.reduce((sum, metric) => sum + metric.distanceNm, 0),
+    totalFuelBurnedKg: metrics.reduce((sum, metric) => sum + metric.fuelBurnedKg, 0),
     monthlyHours: getMonthlyHours(),
-    byCompany: getFlightsByCompany(),
-    byAircraftType: getFlightsByAircraftType(),
+    byCompany: getFlightsByCompany(metrics),
+    byAircraftType: getFlightsByAircraftType(metrics),
     topRoutes: getTopRoutes(TOP_ROUTES_LIMIT),
     punctuality: getPunctualityBreakdown(),
     punctualityExtremes: getPunctualityExtremes(),
     landingRate: getLandingRateStats(),
-    gsxCosts: gsxCostStatsForPireps(getAllPireps()),
-    profit: getProfitStats()
+    gsxCosts: gsxCostStatsForPireps(getAllPireps())
   }
 }

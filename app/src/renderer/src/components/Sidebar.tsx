@@ -12,7 +12,6 @@ import {
   ClipboardIcon,
   FleetIcon,
   BarChartIcon,
-  DollarSignIcon,
   PlaneRightIcon
 } from '@renderer/components/icons'
 
@@ -23,8 +22,7 @@ const NAV_ITEMS = [
   { to: '/suivi', label: 'Suivi en direct', icon: RadarIcon },
   { to: '/pireps', label: 'PIREPs', icon: ClipboardIcon },
   { to: '/flotte', label: 'Flotte', icon: FleetIcon },
-  { to: '/statistiques', label: 'Statistiques', icon: BarChartIcon },
-  { to: '/economie', label: 'Économie', icon: DollarSignIcon }
+  { to: '/statistiques', label: 'Statistiques', icon: BarChartIcon }
 ]
 
 const OUTDATED_PHASES = new Set(['available', 'downloading', 'downloaded'])

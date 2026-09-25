@@ -24,6 +24,7 @@ const SOURCE_LABEL: Record<LoadsheetValueSource, string> = {
 
 function formatValue(value: number | null, unit: LoadsheetComparisonRow['unit']): string {
   if (value === null) return '—'
+  if (unit === 'percent') return `${value.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`
   const rounded = Math.round(value).toLocaleString('fr-FR')
   return unit === 'pax' ? rounded : `${rounded} KG`
 }

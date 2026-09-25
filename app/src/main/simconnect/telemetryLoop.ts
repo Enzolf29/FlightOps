@@ -78,6 +78,19 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_NUMPASSENGERS_BOARDING_TOTAL', 'number', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_BOARDING_CARGO_PERCENT', 'percent', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_VAR_Frozen', 'bool', SimConnectDataType.FLOAT64)
+  // Statut détaillé des autres services GSX (voir l'app GSX de la tablette) — mêmes conventions
+  // d'état que le reste (0 = absent, 5 = en cours, 6 = terminé, selon la doc communautaire GSX).
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_PUSHBACK_STATUS', 'number', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_REFUELING_STATE', 'number', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_FUELHOSE_CONNECTED', 'bool', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_CATERING_STATE', 'number', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_GPU_STATE', 'number', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_DEICE_STATE', 'number', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_OPERATEJETWAYS_STATE', 'number', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_OPERATESTAIRS_STATE', 'number', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_LAVATORY_STATE', 'number', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_WATER_STATE', 'number', SimConnectDataType.FLOAT64)
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'L:FSDT_GSX_CLEANING_STATE', 'number', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'TIME OF DAY', 'enum', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'AMBIENT TEMPERATURE', 'celsius', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'TOTAL AIR TEMPERATURE', 'celsius', SimConnectDataType.FLOAT64)
@@ -106,6 +119,10 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'MAX ZERO FUEL WEIGHT', 'kilograms', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'MAX TAKEOFF WEIGHT', 'kilograms', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'MAX LANDING WEIGHT', 'kilograms', SimConnectDataType.FLOAT64)
+  // Position du centre de gravité en %MAC, publiée par MSFS pour l'avion réellement chargé — utilisée
+  // comme MACZFW sur la feuille de chargement (capturée au même instant que le reste du chargement
+  // final, voir makeLoadsheetSnapshot) faute d'une donnée %MAC dédiée dans l'OFP SimBrief.
+  handle.addToDataDefinition(DEFINITION_TELEMETRY, 'CG PERCENT', 'percent', SimConnectDataType.FLOAT64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'TITLE', null, SimConnectDataType.STRING256)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'ATC ID', null, SimConnectDataType.STRING64)
   handle.addToDataDefinition(DEFINITION_TELEMETRY, 'ZULU TIME', 'seconds', SimConnectDataType.FLOAT64)
@@ -155,6 +172,17 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
     const gsxPassengersBoardedTotal = Math.round(data.readFloat64())
     const gsxCargoBoardingPercent = data.readFloat64()
     const gsxPushbackFrozen = data.readFloat64() >= 0.5
+    const gsxPushbackStatus = Math.round(data.readFloat64())
+    const gsxRefuelingState = Math.round(data.readFloat64())
+    const gsxFuelHoseConnected = data.readFloat64() >= 0.5
+    const gsxCateringState = Math.round(data.readFloat64())
+    const gsxGpuState = Math.round(data.readFloat64())
+    const gsxDeiceState = Math.round(data.readFloat64())
+    const gsxJetwayOperationState = Math.round(data.readFloat64())
+    const gsxStairsOperationState = Math.round(data.readFloat64())
+    const gsxLavatoryState = Math.round(data.readFloat64())
+    const gsxWaterState = Math.round(data.readFloat64())
+    const gsxCleaningState = Math.round(data.readFloat64())
     const timeOfDay = Math.round(data.readFloat64())
     const outsideAirTemperatureCelsius = data.readFloat64()
     const totalAirTemperatureCelsius = data.readFloat64()
@@ -175,6 +203,7 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
     const maxZeroFuelWeightKg = data.readFloat64()
     const maxTakeoffWeightKg = data.readFloat64()
     const maxLandingWeightKg = data.readFloat64()
+    const cgPercent = data.readFloat64()
     const title = data.readString256()
     const atcId = data.readString64()
     const zuluSeconds = data.readFloat64()
@@ -220,6 +249,17 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
       gsxPassengersBoardedTotal,
       gsxCargoBoardingPercent,
       gsxPushbackFrozen,
+      gsxPushbackStatus,
+      gsxRefuelingState,
+      gsxFuelHoseConnected,
+      gsxCateringState,
+      gsxGpuState,
+      gsxDeiceState,
+      gsxJetwayOperationState,
+      gsxStairsOperationState,
+      gsxLavatoryState,
+      gsxWaterState,
+      gsxCleaningState,
       timeOfDay,
       outsideAirTemperatureCelsius,
       totalAirTemperatureCelsius,
@@ -239,6 +279,7 @@ export function startTelemetryLoop(handle: SimConnectConnection, onTick: Telemet
       maxZeroFuelWeightKg,
       maxTakeoffWeightKg,
       maxLandingWeightKg,
+      cgPercent,
       title,
       atcId,
       simZuluIso: new Date(Date.UTC(zuluYear, zuluMonth - 1, zuluDay, 0, 0, zuluSeconds)).toISOString()

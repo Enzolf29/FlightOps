@@ -42,6 +42,21 @@ export interface SimTelemetry {
   gsxCargoBoardingPercent?: number
   /** L:var GSX activée pendant le repoussage. */
   gsxPushbackFrozen?: boolean
+  /** État détaillé du repoussage GSX (distinct de gsxDepartureState, plus général) — voir
+   * l'app GSX de la tablette (nouvelle intégration de contrôle/statut GSX). */
+  gsxPushbackStatus?: number
+  gsxRefuelingState?: number
+  /** Vrai dès que le tuyau de carburant GSX est raccordé à l'avion. */
+  gsxFuelHoseConnected?: boolean
+  gsxCateringState?: number
+  gsxGpuState?: number
+  gsxDeiceState?: number
+  /** Opération de passerelle (approche/retrait), distincte de la simple présence de la passerelle. */
+  gsxJetwayOperationState?: number
+  gsxStairsOperationState?: number
+  gsxLavatoryState?: number
+  gsxWaterState?: number
+  gsxCleaningState?: number
   /** SimConnect TIME OF DAY : 0 aube, 1 jour, 2 crépuscule, 3 nuit. */
   timeOfDay?: number
   /** Température statique extérieure et température totale (avec effet de compression), en °C. */
@@ -68,6 +83,9 @@ export interface SimTelemetry {
   maxZeroFuelWeightKg?: number
   maxTakeoffWeightKg?: number
   maxLandingWeightKg?: number
+  /** Position du centre de gravité en %MAC publiée par MSFS — utilisée comme MACZFW sur la feuille
+   * de chargement (voir CabinLoadsheetSnapshot.macZfwPercent), l'OFP SimBrief n'en publiant pas. */
+  cgPercent?: number
   title: string
   atcId: string
   /** Heure Zulu (UTC) du simulateur — jamais l'horloge du PC, cf. calculs de retard. */

@@ -3,6 +3,7 @@ import { rmSync } from 'fs'
 import { join } from 'path'
 import { IPC } from '@shared/ipc/contract'
 import { getDb } from '../db/index'
+import { seedBundledCabinAnnouncements } from '../cabinAnnouncements/seedBundledAnnouncements'
 import { disarmFlight, getArmedFlightId } from '../simconnect/flightStatusDetector'
 
 export function registerAppHandlers(): void {
@@ -20,6 +21,7 @@ export function registerAppHandlers(): void {
     // (enfants avant parents), sinon SQLite rejette la suppression et TOUTE la transaction annule.
     const wipe = db.transaction(() => {
       db.prepare('DELETE FROM cabin_announcement_files').run()
+      db.prepare('DELETE FROM cabin_announcement_seeded').run()
       db.prepare('DELETE FROM pireps').run()
       db.prepare('DELETE FROM flights').run()
       db.prepare('DELETE FROM aircraft').run()
@@ -34,6 +36,8 @@ export function registerAppHandlers(): void {
       // La base ne référence déjà plus aucun son. Windows peut conserver un fichier audio ouvert
       // quelques instants ; il sera simplement laissé orphelin plutôt que de faire échouer le reset.
     }
+    // Après un reset complet, le joueur retrouve les annonces de base livrées avec l'application.
+    seedBundledCabinAnnouncements()
 
     return true
   })

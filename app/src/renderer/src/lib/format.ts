@@ -27,3 +27,25 @@ export function formatFlightDuration(scheduledDeparture: string, scheduledArriva
 export function formatEur(amount: number): string {
   return `${amount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 }
+
+const NM_TO_KM = 1.852
+const EARTH_CIRCUMFERENCE_NM = 21639
+
+export function formatDistanceKm(distanceNm: number): string {
+  return `${Math.round(distanceNm * NM_TO_KM).toLocaleString('fr-FR')} km`
+}
+
+export function formatDistanceNm(distanceNm: number): string {
+  return `${Math.round(distanceNm).toLocaleString('fr-FR')} NM`
+}
+
+/** Distance exprimée en tours de la Terre (équateur ≈ 40 075 km). */
+export function formatEarthLaps(distanceNm: number): string {
+  const laps = distanceNm / EARTH_CIRCUMFERENCE_NM
+  const value = laps.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return `${value} tour${laps >= 2 ? 's' : ''} de la Terre`
+}
+
+export function formatFuelKg(fuelKg: number): string {
+  return `${Math.round(fuelKg).toLocaleString('fr-FR')} kg`
+}
