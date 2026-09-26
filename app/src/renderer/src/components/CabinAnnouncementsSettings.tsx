@@ -57,6 +57,16 @@ export function CabinAnnouncementsSettings() {
       queryClient.invalidateQueries({ queryKey: ['cabin-announcements', companyId] })
     }
   })
+  const resetMutation = useMutation({
+    mutationFn: (selectedCompanyId: number) => window.flightops.cabinAnnouncements.resetToDefaults(selectedCompanyId),
+    onSuccess: () => {
+      stopPreview()
+      setError(null)
+      setNewVariants({})
+      queryClient.invalidateQueries({ queryKey: ['cabin-announcements'] })
+    },
+    onError: (reason) => setError(reason instanceof Error ? reason.message : 'Réinitialisation impossible.')
+  })
   const volumeMutation = useMutation({
     mutationFn: ({ fileId, volume }: { fileId: number; volume: number }) =>
       window.flightops.cabinAnnouncements.setVolume(fileId, volume / 100),
@@ -100,6 +110,16 @@ export function CabinAnnouncementsSettings() {
     volumeMutation.mutate({ fileId, volume: draft })
   }
 
+  function resetCompany() {
+    if (companyId === null || !selectedCompany) return
+    const confirmed = window.confirm(
+      `Réinitialiser les annonces de ${selectedCompany.displayName} ?
+
+Les fichiers ajoutés, les suppressions et les volumes seront perdus : les annonces et réglages par défaut sont remis.`
+    )
+    if (confirmed) resetMutation.mutate(companyId)
+  }
+
   const selectedCompany = companies.find((company) => company.id === companyId) ?? null
 
   if (companiesLoading) return <p className="empty-hint">Chargement des compagnies…</p>
@@ -141,6 +161,9 @@ export function CabinAnnouncementsSettings() {
                 {CABIN_ANNOUNCEMENT_DEFINITIONS.length} · {files.length} fichier{files.length === 1 ? '' : 's'}
               </p>
             </div>
+            <button type="button" className="danger-ghost cabin-reset-button" disabled={resetMutation.isPending} onClick={resetCompany}>
+              {resetMutation.isPending ? 'Réinitialisation…' : 'Réinitialiser les annonces'}
+            </button>
           </div>
           {error ? <p className="form-error">{error}</p> : null}
           {filesLoading ? <p className="empty-hint">Chargement…</p> : (

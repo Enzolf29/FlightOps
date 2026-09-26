@@ -12,6 +12,16 @@ describe('parseAnnouncementFilename', () => {
     expect(parseAnnouncementFilename('ArmDoors[1].ogg')).toEqual({ type: 'arm_doors', variant: 'any', index: 1 })
   })
 
+  it('treats evening like night and morning like day', () => {
+    expect(parseAnnouncementFilename('BoardingWelcome[Evening][1].ogg').variant).toBe('night')
+    expect(parseAnnouncementFilename('BoardingWelcome[Morning].ogg').variant).toBe('day')
+  })
+
+  it('makes every cabin dim announcement night-only', () => {
+    expect(parseAnnouncementFilename('CabinDimTakeoff.wav')).toEqual({ type: 'cabin_dim_takeoff', variant: 'night', index: null })
+    expect(parseAnnouncementFilename('CabinDim.wav').variant).toBe('night')
+  })
+
   it('accepts spelling differences found in the source packs', () => {
     expect(parseAnnouncementFilename('Boarding Complete.wav').type).toBe('boarding_complete')
     expect(parseAnnouncementFilename('Boarding-Music.wav').type).toBe('boarding_music')

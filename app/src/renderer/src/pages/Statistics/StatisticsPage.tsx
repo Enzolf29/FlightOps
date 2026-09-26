@@ -145,8 +145,7 @@ export function StatisticsPage() {
               {
                 key: 'fuel',
                 label: 'Carburant consommé',
-                value: formatFuelKg(data.totalFuelBurnedKg),
-                detail: 'Réellement brûlé, hors carburant non utilisé'
+                value: formatFuelKg(data.totalFuelBurnedKg)
               }
             ]}
           />
@@ -176,55 +175,71 @@ export function StatisticsPage() {
           </section>
 
           <section className="home-section">
-            <h2>Vols par compagnie</h2>
-            <div className="pirep-chart-wrapper">
-              <ResponsiveContainer width="100%" height={Math.max(180, data.byCompany.length * 36)}>
-                <BarChart data={data.byCompany} layout="vertical" margin={{ top: 8, right: 20, bottom: 0, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="var(--text-muted)" />
-                  <YAxis
-                    dataKey="companyIcao"
-                    type="category"
-                    tick={{ fontSize: 12 }}
-                    stroke="var(--text-muted)"
-                    width={60}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: 'var(--bg-surface)',
-                      border: '1px solid var(--border-subtle)'
-                    }}
-                  />
-                  <Bar dataKey="count" name="Vols" fill="var(--accent)" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <table className="stats-table">
-              <thead>
-                <tr>
-                  <th>Compagnie</th>
-                  <th>Vols</th>
-                  <th>Heures</th>
-                  <th>Distance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.byCompany.map((row) => (
-                  <tr key={row.companyIcao}>
-                    <td>{row.companyIcao}</td>
-                    <td>{row.count}</td>
-                    <td>{formatHours(row.hours)}</td>
-                    <td>{formatDistanceKm(row.distanceNm)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <h2>Vols et heures par compagnie</h2>
+            {data.byCompany.length > 0 ? (
+              <div className="stats-chart-pair">
+                <div className="pirep-chart-wrapper">
+                  <ResponsiveContainer width="100%" height={Math.max(180, data.byCompany.length * 36)}>
+                    <BarChart
+                      data={data.byCompany}
+                      layout="vertical"
+                      margin={{ top: 8, right: 20, bottom: 0, left: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                      <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="var(--text-muted)" />
+                      <YAxis
+                        dataKey="companyIcao"
+                        type="category"
+                        tick={{ fontSize: 12 }}
+                        stroke="var(--text-muted)"
+                        width={60}
+                      />
+                      <Tooltip
+                        contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}
+                      />
+                      <Bar dataKey="count" name="Vols" fill="var(--accent)" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="pirep-chart-wrapper">
+                  <ResponsiveContainer width="100%" height={Math.max(180, data.byCompany.length * 36)}>
+                    <BarChart
+                      data={data.byCompany}
+                      layout="vertical"
+                      margin={{ top: 8, right: 20, bottom: 0, left: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                      <XAxis
+                        type="number"
+                        tick={{ fontSize: 11 }}
+                        stroke="var(--text-muted)"
+                        tickFormatter={(value) => `${value} h`}
+                      />
+                      <YAxis
+                        dataKey="companyIcao"
+                        type="category"
+                        tick={{ fontSize: 12 }}
+                        stroke="var(--text-muted)"
+                        width={60}
+                      />
+                      <Tooltip
+                        contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}
+                        formatter={(value) => formatHours(Number(value))}
+                      />
+                      <Bar dataKey="hours" name="Heures" fill="#4f8cff" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ) : (
+              <p className="empty-hint">Aucune donnée pour l’instant.</p>
+            )}
           </section>
 
           <section className="home-section">
-            <h2>Vols par avion</h2>
+            <h2>Vols et heures par avion</h2>
             {data.byAircraftType.length > 0 ? (
-              <>
+              <div className="stats-chart-pair">
                 <div className="pirep-chart-wrapper">
                   <ResponsiveContainer width="100%" height={Math.max(180, data.byAircraftType.length * 36)}>
                     <BarChart
@@ -242,36 +257,42 @@ export function StatisticsPage() {
                         width={90}
                       />
                       <Tooltip
-                        contentStyle={{
-                          background: 'var(--bg-surface)',
-                          border: '1px solid var(--border-subtle)'
-                        }}
+                        contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}
                       />
                       <Bar dataKey="count" name="Vols" fill="#2fb170" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <table className="stats-table">
-                  <thead>
-                    <tr>
-                      <th>Avion</th>
-                      <th>Vols</th>
-                      <th>Heures</th>
-                      <th>Distance</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.byAircraftType.map((row) => (
-                      <tr key={row.type}>
-                        <td>{row.type}</td>
-                        <td>{row.count}</td>
-                        <td>{formatHours(row.hours)}</td>
-                        <td>{formatDistanceKm(row.distanceNm)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </>
+                <div className="pirep-chart-wrapper">
+                  <ResponsiveContainer width="100%" height={Math.max(180, data.byAircraftType.length * 36)}>
+                    <BarChart
+                      data={data.byAircraftType}
+                      layout="vertical"
+                      margin={{ top: 8, right: 20, bottom: 0, left: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                      <XAxis
+                        type="number"
+                        tick={{ fontSize: 11 }}
+                        stroke="var(--text-muted)"
+                        tickFormatter={(value) => `${value} h`}
+                      />
+                      <YAxis
+                        dataKey="type"
+                        type="category"
+                        tick={{ fontSize: 12 }}
+                        stroke="var(--text-muted)"
+                        width={90}
+                      />
+                      <Tooltip
+                        contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}
+                        formatter={(value) => formatHours(Number(value))}
+                      />
+                      <Bar dataKey="hours" name="Heures" fill="#8fd14f" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             ) : (
               <p className="empty-hint">Aucune donnée pour l’instant.</p>
             )}

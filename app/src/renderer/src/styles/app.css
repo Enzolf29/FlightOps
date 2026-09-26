@@ -3038,6 +3038,7 @@ button.danger,
 .cabin-settings-intro { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .cabin-local-badge { flex: 0 0 auto; padding: 7px 10px; border-radius: 999px; background: color-mix(in srgb, var(--status-on-time) 13%, transparent); color: var(--status-on-time); font-size: 11px; font-weight: 800; }
 .cabin-library-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.cabin-reset-button { margin-left: auto; align-self: flex-start; }
 .cabin-library-header > div:last-child { display: flex; flex-direction: column; gap: 3px; }
 .cabin-library-header h2, .cabin-library-header p { margin: 0; }
 .cabin-announcement-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 10px; }
@@ -3111,26 +3112,14 @@ button.danger,
 .cabin-variant-badge--night { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
 .cabin-announcement-actions select { padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-app); color: var(--text-primary); font-size: 12px; }
 
-.stats-table {
-  width: 100%;
-  margin-top: 12px;
-  border-collapse: collapse;
-  font-size: 13px;
+.stats-chart-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.stats-table th,
-.stats-table td {
-  padding: 6px 10px;
-  text-align: right;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.stats-table th:first-child,
-.stats-table td:first-child {
-  text-align: left;
-}
-
-.stats-table th {
-  color: var(--text-muted);
-  font-weight: 500;
+@media (max-width: 900px) {
+  .stats-chart-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

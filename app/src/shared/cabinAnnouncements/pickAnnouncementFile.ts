@@ -19,9 +19,9 @@ interface PickableFile {
 
 /**
  * Choisit au hasard le fichier à lire pour une annonce : parmi ceux de la période courante ou
- * marqués "toujours" ; s'il n'y en a aucun (ex. annonce livrée seulement en version jour, vol de
- * nuit), parmi tous les fichiers plutôt que de rester muet. Évite de rejouer le fichier précédent
- * quand il y a un autre choix.
+ * marqués "toujours". Un fichier réservé au jour ou à la nuit ne se lit jamais hors de sa période :
+ * s'il n'y en a aucun, l'annonce n'est pas jouée. Si l'heure du simulateur est inconnue, tous les
+ * fichiers sont éligibles. Évite de rejouer le fichier précédent quand il y a un autre choix.
  */
 export function pickAnnouncementFile<T extends PickableFile>(
   files: T[],
@@ -31,7 +31,7 @@ export function pickAnnouncementFile<T extends PickableFile>(
 ): T | null {
   if (files.length === 0) return null
   let pool = period === null ? files : files.filter((file) => file.variant === 'any' || file.variant === period)
-  if (pool.length === 0) pool = files
+  if (pool.length === 0) return null
   if (pool.length > 1 && lastPlayedId !== null) {
     const withoutLast = pool.filter((file) => file.id !== lastPlayedId)
     if (withoutLast.length > 0) pool = withoutLast

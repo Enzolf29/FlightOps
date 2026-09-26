@@ -12,6 +12,17 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
   {
+    version: '1.0.30',
+    changes: [
+      'Annonces cabine : volume par défaut à 50 % pour toutes les annonces, y compris celles ajoutées par le joueur',
+      'Annonces cabine : les Cabin Dim Takeoff ne se jouent plus que de nuit',
+      'Annonces cabine : les fichiers réservés au jour ([Morning]/[Afternoon]) ou à la nuit ([Evening]/[Night]) ne sont jamais lus en dehors de leur période',
+      'Annonces cabine : nouveau bouton « Réinitialiser les annonces » pour chaque compagnie, qui supprime les modifications du joueur et remet les annonces et volumes par défaut',
+      'Annonces cabine : les annonces de base affichent à nouveau leur nom de fichier d’origine dans les paramètres',
+      'Statistiques : les heures par compagnie et par avion sont affichées dans un second graphique à droite du nombre de vols'
+    ]
+  },
+  {
     version: '1.0.29',
     changes: [
       'Suppression complète du mode économie (tarifs, passagers et fret calculés par l’application, bénéfice, capacités des avions) : SimBrief gère désormais les charges. Les factures GSX sont conservées à titre indicatif dans le suivi de vol, les PIREPs et les statistiques',

@@ -141,7 +141,9 @@ const flightopsApi: FlightopsApi = {
       ipcRenderer.invoke(IPC.cabinAnnouncements.import, companyId, type, variant),
     remove: (fileId: number): Promise<void> => ipcRenderer.invoke(IPC.cabinAnnouncements.remove, fileId),
     setVolume: (fileId: number, volume: number): Promise<CabinAnnouncementFile> =>
-      ipcRenderer.invoke(IPC.cabinAnnouncements.setVolume, fileId, volume)
+      ipcRenderer.invoke(IPC.cabinAnnouncements.setVolume, fileId, volume),
+    resetToDefaults: (companyId: number): Promise<void> =>
+      ipcRenderer.invoke(IPC.cabinAnnouncements.resetToDefaults, companyId)
   },
   tablet: {
     getServerInfo: (): Promise<TabletServerInfo> => ipcRenderer.invoke(IPC.tablet.getServerInfo),

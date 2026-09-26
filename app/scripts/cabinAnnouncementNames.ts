@@ -39,11 +39,11 @@ const TYPE_ALIASES: Record<string, string> = {
 }
 
 const DAY_TAGS = new Set(['afternoon', 'day', 'morning'])
-const NIGHT_TAGS = new Set(['night'])
+const NIGHT_TAGS = new Set(['evening', 'night'])
 
 /**
  * Lit un nom de fichier d'annonce : "Type", "Type[1]", "Type[Afternoon][2]", "Type2"... Les balises
- * entre crochets donnent la période ([Afternoon]/[Night]) et/ou le numéro de variante.
+ * entre crochets donnent la période ([Morning]/[Afternoon] = jour, [Evening]/[Night] = nuit) et/ou le numéro de variante.
  */
 export function parseAnnouncementFilename(filename: string): ParsedAnnouncementFilename {
   const withoutExtension = filename.replace(/\.[^.]+$/, '')
@@ -65,5 +65,9 @@ export function parseAnnouncementFilename(filename: string): ParsedAnnouncementF
     if (index === null) index = Number(trailingNumber[2])
   }
 
-  return { type: TYPE_ALIASES[base] ?? null, variant, index }
+  const type = TYPE_ALIASES[base] ?? null
+  // L'extinction des lumières avant le décollage n'a de sens que de nuit, balisée ou non.
+  if (type === 'cabin_dim_takeoff') variant = 'night'
+
+  return { type, variant, index }
 }

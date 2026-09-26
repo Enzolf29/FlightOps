@@ -102,6 +102,7 @@ export interface FlightopsApi {
     ) => Promise<CabinAnnouncementFile | null>
     remove: (fileId: number) => Promise<void>
     setVolume: (fileId: number, volume: number) => Promise<CabinAnnouncementFile>
+    resetToDefaults: (companyId: number) => Promise<void>
   }
   tablet: {
     getServerInfo: () => Promise<TabletServerInfo>

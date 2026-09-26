@@ -52,6 +52,9 @@ export function getCabinAnnouncementFileById(id: number): StoredCabinAnnouncemen
   return row ? mapRow(row) : null
 }
 
+/** Volume initial de toute annonce ajoutée (livrée avec l'application ou importée par le joueur). */
+export const DEFAULT_CABIN_ANNOUNCEMENT_VOLUME = 0.5
+
 export function addCabinAnnouncementFile(
   companyId: number,
   type: CabinAnnouncementType,
@@ -61,10 +64,10 @@ export function addCabinAnnouncementFile(
 ): StoredCabinAnnouncementFile {
   const result = getDb()
     .prepare(
-      `INSERT INTO cabin_announcement_files (company_id, announcement_type, variant, file_path, original_filename, updated_at)
-       VALUES (?, ?, ?, ?, ?, datetime('now'))`
+      `INSERT INTO cabin_announcement_files (company_id, announcement_type, variant, file_path, original_filename, updated_at, volume)
+       VALUES (?, ?, ?, ?, ?, datetime('now'), ?)`
     )
-    .run(companyId, type, variant, filePath, originalFilename)
+    .run(companyId, type, variant, filePath, originalFilename, DEFAULT_CABIN_ANNOUNCEMENT_VOLUME)
   return getCabinAnnouncementFileById(Number(result.lastInsertRowid))!
 }
 
@@ -85,10 +88,37 @@ export function hasCabinAnnouncementFiles(companyId: number, type: CabinAnnounce
   return row !== undefined
 }
 
+/** Remplace le nom normalisé d'une annonce de base ("any-1.mp3") par le nom du fichier d'origine. */
+export function restoreBundledAnnouncementName(
+  companyId: number,
+  type: CabinAnnouncementType,
+  storedFilename: string,
+  normalizedName: string,
+  originalName: string
+): void {
+  getDb()
+    .prepare(
+      `UPDATE cabin_announcement_files SET original_filename = ?
+       WHERE company_id = ? AND announcement_type = ? AND original_filename = ? AND file_path LIKE ?`
+    )
+    .run(originalName, companyId, type, normalizedName, `%${storedFilename}`)
+}
+
 export function isBundledAnnouncementSeeded(bundledKey: string): boolean {
   return getDb().prepare('SELECT 1 AS found FROM cabin_announcement_seeded WHERE bundled_key = ?').get(bundledKey) !== undefined
 }
 
 export function markBundledAnnouncementSeeded(bundledKey: string): void {
   getDb().prepare('INSERT OR IGNORE INTO cabin_announcement_seeded (bundled_key) VALUES (?)').run(bundledKey)
+}
+
+/** Retire toutes les annonces d'une compagnie et oublie ce qui a déjà été copié depuis les annonces
+ * de base (clés "<ICAO>/…"), pour qu'elles puissent être livrées à nouveau. */
+export function clearCabinAnnouncementsForCompany(companyId: number, icaoCode: string): void {
+  const db = getDb()
+  db.transaction(() => {
+    db.prepare('DELETE FROM cabin_announcement_files WHERE company_id = ?').run(companyId)
+    // Un code OACI ne contient que des lettres et chiffres : aucun caractère joker à échapper.
+    db.prepare('DELETE FROM cabin_announcement_seeded WHERE bundled_key LIKE ?').run(`${icaoCode.toUpperCase()}/%`)
+  })()
 }

@@ -79,7 +79,8 @@ export const IPC = {
     list: 'cabinAnnouncements:list',
     import: 'cabinAnnouncements:import',
     remove: 'cabinAnnouncements:remove',
-    setVolume: 'cabinAnnouncements:setVolume'
+    setVolume: 'cabinAnnouncements:setVolume',
+    resetToDefaults: 'cabinAnnouncements:resetToDefaults'
   },
   tablet: {
     getServerInfo: 'tablet:getServerInfo',

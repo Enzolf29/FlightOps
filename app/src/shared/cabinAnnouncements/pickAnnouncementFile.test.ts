@@ -32,9 +32,12 @@ describe('pickAnnouncementFile', () => {
     expect([...picked].sort()).toEqual([1, 3, 4])
   })
 
-  it('falls back to every file when none matches the period', () => {
+  it('plays nothing when every file is reserved to another period', () => {
     const dayOnly = [{ id: 7, variant: 'day' as const }, { id: 8, variant: 'day' as const }]
-    expect(pickAnnouncementFile(dayOnly, 'night', null, () => 0.9)!.id).toBe(8)
+    expect(pickAnnouncementFile(dayOnly, 'night', null, () => 0.9)).toBeNull()
+    const nightOnly = [{ id: 9, variant: 'night' as const }]
+    expect(pickAnnouncementFile(nightOnly, 'day')).toBeNull()
+    expect(pickAnnouncementFile(nightOnly, 'night')!.id).toBe(9)
   })
 
   it('uses every file when the period is unknown', () => {

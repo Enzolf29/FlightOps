@@ -28,6 +28,7 @@ import migration026 from './migrations/026_flight_economy_cabin_multiplier.sql?r
 import migration027 from './migrations/027_baggage_pricing.sql?raw'
 import migration028 from './migrations/028_cabin_announcement_variants.sql?raw'
 import migration029 from './migrations/029_remove_economy.sql?raw'
+import migration030 from './migrations/030_cabin_announcement_defaults.sql?raw'
 
 interface Migration {
   version: number
@@ -63,7 +64,8 @@ const MIGRATIONS: Migration[] = [
   { version: 26, sql: migration026 },
   { version: 27, sql: migration027 },
   { version: 28, sql: migration028 },
-  { version: 29, sql: migration029 }
+  { version: 29, sql: migration029 },
+  { version: 30, sql: migration030 }
 ]
 
 export function runMigrations(db: Database.Database): void {

@@ -2,14 +2,15 @@
  * Prépare les annonces cabine livrées avec l'application : lit les packs bruts (un dossier par code
  * OACI de compagnie), reconnaît chaque fichier (voir cabinAnnouncementNames.ts), compresse les WAV
  * en MP3 (les OGG sont copiés tels quels) et écrit le résultat normalisé dans
- * resources/cabin-announcements/<ICAO>/<type>/<variante>-<n>.<ext>, le dossier embarqué dans
+ * resources/cabin-announcements/<ICAO>/<type>/<variante>-<n>.<ext> (les noms d'origine sont conservés
+ * dans manifest.json pour l'affichage), le dossier embarqué dans
  * l'installateur (voir extraResources) puis copié chez le joueur au premier lancement.
  *
  * Usage (ffmpeg requis, chemin via FFMPEG_PATH sinon "ffmpeg" du PATH) :
  *   node scripts/prepare-cabin-announcements.ts "<dossier des packs bruts>"
  */
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 import { parseAnnouncementFilename } from './cabinAnnouncementNames.ts'
 
@@ -28,6 +29,8 @@ interface Entry {
   index: number | null
 }
 
+/** Nom d'origine de chaque fichier livré (clé "<ICAO>/<type>/<fichier>"), affiché dans les paramètres. */
+const manifest: Record<string, string> = {}
 const unmapped: string[] = []
 let bytesBefore = 0
 let bytesAfter = 0
@@ -72,10 +75,13 @@ for (const company of readdirSync(SOURCE_DIR).filter((name) => statSync(join(SOU
         copyFileSync(source, target)
       }
       bytesAfter += statSync(target).size
+      manifest[`${company}/${type}/${variant}-${position + 1}${isWav ? '.mp3' : extension}`] = entry.file
       console.log(`${company}/${entry.file}  ->  ${type}/${variant}-${position + 1}`)
     })
   }
 }
+
+writeFileSync(join(OUTPUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2))
 
 const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1)
 console.log(`\nTaille : ${mb(bytesBefore)} Mo -> ${mb(bytesAfter)} Mo`)
